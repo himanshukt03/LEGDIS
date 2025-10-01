@@ -1,7 +1,9 @@
 import { useState } from 'react';
-import { Shield, ArrowLeft, Eye, EyeOff } from 'lucide-react';
-import { Node } from '../types';
+import { ArrowLeft, Eye, EyeOff } from 'lucide-react';
 import { storage } from '../lib/storage';
+import { Node } from '../types';
+
+const logoSrc = new URL('../public/ledgis-logo.png', import.meta.url).href;
 
 interface LoginPageProps {
   onLogin: (node: Node) => void;
@@ -15,12 +17,12 @@ export default function LoginPage({ onLogin, onBack }: LoginPageProps) {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
-  const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSubmit = (event: React.FormEvent) => {
+    event.preventDefault();
     setError('');
 
     if (!nodeId || !key) {
-      setError('Please enter both Node ID and Key');
+      setError('Please enter both a node identifier and key.');
       return;
     }
 
@@ -30,91 +32,86 @@ export default function LoginPage({ onLogin, onBack }: LoginPageProps) {
       if (nodeId === 'NODE001' && key === 'SECURE_KEY_123') {
         const node: Node = {
           id: 'node-1',
-          nodeId: nodeId,
+          nodeId,
           name: 'Law Enforcement Agency',
           isActive: true,
           createdAt: new Date().toISOString(),
           lastLogin: new Date().toISOString(),
         };
+
         storage.setCurrentNode(node);
         onLogin(node);
       } else {
-        setError('Invalid credentials');
+        setError('The credentials provided are invalid.');
         setIsLoading(false);
       }
-    }, 800);
+    }, 600);
   };
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-charcoal-950 via-charcoal-900 to-sapphire-950 flex items-center justify-center p-6">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(37,99,235,0.15),rgba(255,255,255,0))]"></div>
+    <div className="relative flex min-h-screen items-center justify-center overflow-hidden bg-neutral-950 text-neutral-50 px-6 py-10">
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -left-32 top-10 h-80 w-80 rounded-full bg-neutral-900/40 blur-3xl" />
+        <div className="absolute right-0 top-40 h-[28rem] w-[28rem] rounded-full bg-neutral-800/30 blur-3xl" />
+        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.015)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.015)_1px,transparent_1px)] bg-[size:70px_70px] opacity-50" />
+      </div>
 
       <button
         onClick={onBack}
-        className="absolute top-8 left-8 flex items-center space-x-2 text-gray-400 hover:text-white transition-colors group"
+        className="absolute left-8 top-8 inline-flex items-center gap-2 text-sm text-neutral-400 transition hover:text-neutral-100"
       >
-        <ArrowLeft className="w-5 h-5 group-hover:-translate-x-1 transition-transform" />
-        <span className="text-sm font-medium">Back</span>
+        <ArrowLeft className="h-4 w-4" />
+        Back to landing
       </button>
 
-      <div className="relative w-full max-w-md">
-        <div className="text-center mb-8">
-          <div className="inline-flex items-center justify-center mb-6">
-            <div className="relative">
-              <div className="absolute inset-0 bg-sapphire-500/30 blur-2xl rounded-full"></div>
-              <div className="relative w-16 h-16 bg-gradient-to-br from-sapphire-500 to-sapphire-600 rounded-2xl flex items-center justify-center transform rotate-3">
-                <Shield className="w-9 h-9 text-white" strokeWidth={2} />
-              </div>
-            </div>
-          </div>
-          <h1 className="text-3xl font-bold text-white mb-2">Welcome back</h1>
-          <p className="text-gray-400">Sign in to access your blockchain network</p>
+      <div className="relative w-full max-w-lg">
+        <div className="mb-8 text-center">
+          <img src={logoSrc} alt="LEDGIS" className="mx-auto h-16 w-auto" />
+          <h1 className="mt-6 text-3xl font-semibold tracking-tight">Authenticate your node</h1>
+          <p className="mt-2 text-neutral-400">Provide your assigned credentials to resume evidence governance.</p>
         </div>
 
-        <div className="relative bg-white/5 backdrop-blur-xl border border-white/10 rounded-2xl p-8 shadow-2xl">
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div>
-              <label htmlFor="nodeId" className="block text-sm font-medium text-gray-300 mb-2">
-                Node ID
-              </label>
+        <div className="relative rounded-2xl border border-neutral-800/60 bg-neutral-950/70 p-8 shadow-[0_30px_90px_-60px_rgba(0,0,0,0.8)]">
+          <form onSubmit={handleSubmit} className="space-y-6">
+            <div className="space-y-2">
+              <label htmlFor="nodeId" className="text-sm font-medium text-neutral-200">Node identifier</label>
               <input
                 id="nodeId"
                 type="text"
                 value={nodeId}
-                onChange={(e) => setNodeId(e.target.value)}
-                className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 text-white placeholder-gray-500 focus:outline-none focus:border-sapphire-500 focus:ring-2 focus:ring-sapphire-500/20 transition-all"
-                placeholder="Enter node identifier"
+                onChange={(event) => setNodeId(event.target.value)}
+                className="w-full rounded-xl border border-neutral-800 bg-neutral-900/60 px-4 py-3 text-neutral-50 placeholder-neutral-500 focus:border-neutral-600 focus:outline-none focus:ring-2 focus:ring-neutral-700"
+                placeholder="e.g. NODE001"
                 disabled={isLoading}
               />
             </div>
 
-            <div>
-              <label htmlFor="key" className="block text-sm font-medium text-gray-300 mb-2">
-                Authentication Key
-              </label>
+            <div className="space-y-2">
+              <label htmlFor="nodeKey" className="text-sm font-medium text-neutral-200">Hardware key</label>
               <div className="relative">
                 <input
-                  id="key"
+                  id="nodeKey"
                   type={showKey ? 'text' : 'password'}
                   value={key}
-                  onChange={(e) => setKey(e.target.value)}
-                  className="w-full bg-white/5 border border-white/10 rounded-xl px-4 py-3 pr-12 text-white placeholder-gray-500 focus:outline-none focus:border-sapphire-500 focus:ring-2 focus:ring-sapphire-500/20 transition-all"
-                  placeholder="Enter authentication key"
+                  onChange={(event) => setKey(event.target.value)}
+                  className="w-full rounded-xl border border-neutral-800 bg-neutral-900/60 px-4 py-3 pr-12 text-neutral-50 placeholder-neutral-500 focus:border-neutral-600 focus:outline-none focus:ring-2 focus:ring-neutral-700"
+                  placeholder="Enter secure key"
                   disabled={isLoading}
                 />
                 <button
                   type="button"
-                  onClick={() => setShowKey(!showKey)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400 hover:text-white transition-colors"
+                  onClick={() => setShowKey((value) => !value)}
+                  className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 transition hover:text-neutral-100"
+                  aria-label={showKey ? 'Hide key' : 'Show key'}
                 >
-                  {showKey ? <EyeOff className="w-5 h-5" /> : <Eye className="w-5 h-5" />}
+                  {showKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
             </div>
 
             {error && (
-              <div className="bg-red-500/10 border border-red-500/20 text-red-400 px-4 py-3 rounded-xl text-sm flex items-start">
-                <span className="w-1.5 h-1.5 bg-red-500 rounded-full mt-1.5 mr-2 flex-shrink-0"></span>
+              <div className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
+                <span className="mt-1 block h-2 w-2 rounded-full bg-red-400" />
                 {error}
               </div>
             )}
@@ -122,32 +119,14 @@ export default function LoginPage({ onLogin, onBack }: LoginPageProps) {
             <button
               type="submit"
               disabled={isLoading}
-              className="relative w-full group overflow-hidden bg-gradient-to-r from-sapphire-600 to-blue-600 hover:from-sapphire-500 hover:to-blue-500 text-white font-semibold py-3.5 rounded-xl transition-all duration-300 disabled:opacity-50 disabled:cursor-not-allowed shadow-lg shadow-sapphire-500/25"
+              className="btn-primary w-full justify-center disabled:cursor-not-allowed disabled:opacity-60"
             >
-              <div className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/20 to-white/0 translate-x-[-200%] group-hover:translate-x-[200%] transition-transform duration-1000"></div>
-              <span className="relative">
-                {isLoading ? (
-                  <span className="flex items-center justify-center">
-                    <svg className="animate-spin h-5 w-5 mr-3" viewBox="0 0 24 24">
-                      <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" fill="none" />
-                      <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
-                    </svg>
-                    Connecting...
-                  </span>
-                ) : (
-                  'Sign In'
-                )}
-              </span>
+              {isLoading ? 'Validating…' : 'Sign in securely'}
             </button>
           </form>
 
-          <div className="mt-6 pt-6 border-t border-white/10">
-            <div className="text-center">
-              <p className="text-xs text-gray-500 mb-2">Demo Credentials</p>
-              <div className="inline-flex items-center space-x-2 px-3 py-1.5 bg-white/5 border border-white/10 rounded-lg">
-                <code className="text-xs text-gray-400">NODE001 / SECURE_KEY_123</code>
-              </div>
-            </div>
+          <div className="mt-8 rounded-xl border border-neutral-800/60 bg-neutral-900/50 px-4 py-3 text-center text-xs text-neutral-500">
+            Demo credentials: <span className="font-mono text-neutral-300">NODE001 / SECURE_KEY_123</span>
           </div>
         </div>
       </div>

@@ -1,8 +1,8 @@
-import { useState, useEffect } from 'react';
-import { Layers, Shield, Lock, CheckCircle, AlertCircle, Clock } from 'lucide-react';
-import { Block, EvidenceRecord } from '../types';
-import { storage } from '../lib/storage';
+import { useEffect, useState } from 'react';
+import { AlertCircle, CheckCircle2, Clock, Layers, Lock, Shield } from 'lucide-react';
 import { getBlockStats } from '../lib/blockchain';
+import { storage } from '../lib/storage';
+import type { Block, EvidenceRecord } from '../types';
 
 export default function VisualizerPage() {
   const [blocks, setBlocks] = useState<Block[]>([]);
@@ -11,153 +11,98 @@ export default function VisualizerPage() {
   const [hoveredBlock, setHoveredBlock] = useState<string | null>(null);
 
   useEffect(() => {
-    const allBlocks = storage.getBlocks();
-    const allEvidence = storage.getEvidence();
-    setBlocks(allBlocks);
-    setEvidence(allEvidence);
+    setBlocks(storage.getBlocks());
+    setEvidence(storage.getEvidence());
   }, []);
 
   const stats = getBlockStats(blocks, evidence);
-
-  const getBlockEvidence = (blockId: string) => {
-    return evidence.filter((e) => e.blockId === blockId);
-  };
+  const blockEvidence = (blockId: string) => evidence.filter((e) => e.blockId === blockId);
 
   return (
-    <div className="space-y-8">
-      <div>
-        <h1 className="text-3xl font-bold text-white mb-2">Blockchain Visualizer</h1>
-        <p className="text-gray-400">Interactive view of the immutable evidence ledger</p>
+    <div className="space-y-10">
+      <div className="space-y-2">
+        <h1 className="text-3xl font-semibold tracking-tight text-neutral-50">Ledger visualiser</h1>
+        <p className="text-neutral-400">Explore block topology and validate chain integrity at a glance.</p>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="bg-charcoal-900/50 border border-charcoal-800 rounded-lg p-6">
-          <div className="flex items-center justify-between mb-2">
-            <Layers className="w-5 h-5 text-sapphire-500" />
-            <span className="text-2xl font-bold text-white">{stats.totalBlocks}</span>
-          </div>
-          <p className="text-gray-400 text-sm">Total Blocks</p>
-        </div>
-
-        <div className="bg-charcoal-900/50 border border-charcoal-800 rounded-lg p-6">
-          <div className="flex items-center justify-between mb-2">
-            <Shield className="w-5 h-5 text-sapphire-500" />
-            <span className="text-2xl font-bold text-white">{stats.totalEvidence}</span>
-          </div>
-          <p className="text-gray-400 text-sm">Evidence Records</p>
-        </div>
-
-        <div className="bg-charcoal-900/50 border border-charcoal-800 rounded-lg p-6">
-          <div className="flex items-center justify-between mb-2">
-            {stats.isValid ? (
-              <CheckCircle className="w-5 h-5 text-green-400" />
-            ) : (
-              <AlertCircle className="w-5 h-5 text-red-400" />
-            )}
-            <span className={`text-2xl font-bold ${stats.isValid ? 'text-green-400' : 'text-red-400'}`}>
-              {stats.isValid ? 'VALID' : 'INVALID'}
-            </span>
-          </div>
-          <p className="text-gray-400 text-sm">Chain Integrity</p>
-        </div>
-
-        <div className="bg-charcoal-900/50 border border-charcoal-800 rounded-lg p-6">
-          <div className="flex items-center justify-between mb-2">
-            <Clock className="w-5 h-5 text-sapphire-500" />
-            <span className="text-2xl font-bold text-white">
-              #{stats.latestBlock?.blockNumber || 0}
-            </span>
-          </div>
-          <p className="text-gray-400 text-sm">Latest Block</p>
-        </div>
+      <div className="grid grid-cols-1 gap-4 md:grid-cols-4">
+        <StatCard icon={<Layers className="h-5 w-5" />} label="Total blocks" value={String(stats.totalBlocks)} />
+        <StatCard icon={<Shield className="h-5 w-5" />} label="Evidence records" value={String(stats.totalEvidence)} />
+        <IntegrityCard isValid={stats.isValid} />
+        <StatCard icon={<Clock className="h-5 w-5" />} label="Latest block" value={`#${stats.latestBlock?.blockNumber ?? 0}`} />
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-        <div className="lg:col-span-2 bg-charcoal-900/50 border border-charcoal-800 rounded-lg p-8 overflow-x-auto">
-          <h2 className="text-xl font-semibold text-white mb-6 flex items-center">
-            <Layers className="w-5 h-5 mr-2 text-sapphire-500" />
-            Blockchain Structure
+      <div className="grid grid-cols-1 gap-8 lg:grid-cols-3">
+        <div className="card lg:col-span-2 overflow-x-auto p-8">
+          <h2 className="mb-6 flex items-center text-xl font-semibold text-neutral-100">
+            <Layers className="mr-2 h-5 w-5 text-neutral-300" /> Blockchain structure
           </h2>
 
           <div className="space-y-4">
             {blocks.map((block, index) => {
-              const blockEvidence = getBlockEvidence(block.id);
+              const items = blockEvidence(block.id);
               const isHovered = hoveredBlock === block.id;
               const isSelected = selectedBlock?.id === block.id;
 
               return (
                 <div key={block.id} className="flex items-center">
                   {index > 0 && (
-                    <div className="flex flex-col items-center mr-4">
-                      <div className="w-px h-8 bg-sapphire-600/30"></div>
-                      <div className="text-sapphire-500 text-xs">↓</div>
+                    <div className="mr-4 flex flex-col items-center">
+                      <div className="h-8 w-px bg-neutral-700/40" />
+                      <div className="text-xs text-neutral-400">↓</div>
                     </div>
                   )}
 
                   <div
-                    className={`flex-1 cursor-pointer transition-all duration-300 ${
-                      isSelected
-                        ? 'ring-2 ring-sapphire-600 '
-                        : isHovered
-                        ? 'ring-1 ring-sapphire-600/50 '
-                        : ''
+                    className={`flex-1 cursor-pointer rounded-xl transition-all ${
+                      isSelected ? 'ring-2 ring-neutral-200/70' : isHovered ? 'ring-1 ring-neutral-400/40' : ''
                     }`}
                     onMouseEnter={() => setHoveredBlock(block.id)}
                     onMouseLeave={() => setHoveredBlock(null)}
                     onClick={() => setSelectedBlock(block)}
                   >
-                    <div className="relative bg-charcoal-950 border border-charcoal-800 rounded-lg p-6 hover:border-sapphire-600/50 transition-all">
+                    <div className="relative rounded-xl border border-neutral-800 bg-neutral-950 p-6 transition hover:border-neutral-700">
                       {block.blockNumber === 0 && (
-                        <div className="absolute -top-3 left-4 px-3 py-1 bg-sapphire-600 text-white text-xs font-bold rounded-full">
+                        <div className="absolute -top-3 left-4 rounded-full bg-neutral-100 px-3 py-1 text-xs font-bold text-neutral-900">
                           GENESIS
                         </div>
                       )}
 
-                      <div className="flex items-start justify-between mb-4">
-                        <div className="flex items-center space-x-3">
-                          <div className="w-12 h-12 bg-sapphire-600/10 border border-sapphire-600/30 rounded-lg flex items-center justify-center">
-                            <Lock className="w-6 h-6 text-sapphire-500" />
+                      <div className="mb-4 flex items-start justify-between">
+                        <div className="flex items-center gap-3">
+                          <div className="flex h-12 w-12 items-center justify-center rounded-lg border border-neutral-700 bg-neutral-900/70">
+                            <Lock className="h-6 w-6 text-neutral-200" />
                           </div>
                           <div>
-                            <h3 className="text-white font-semibold text-lg">
-                              Block #{block.blockNumber}
-                            </h3>
-                            <p className="text-gray-500 text-sm">
-                              {new Date(block.timestamp).toLocaleString()}
-                            </p>
+                            <h3 className="text-lg font-semibold text-neutral-100">Block #{block.blockNumber}</h3>
+                            <p className="text-sm text-neutral-500">{new Date(block.timestamp).toLocaleString()}</p>
                           </div>
                         </div>
 
-                        {blockEvidence.length > 0 && (
-                          <div className="px-3 py-1 bg-sapphire-600/10 border border-sapphire-600/30 rounded-full">
-                            <span className="text-sapphire-500 text-xs font-semibold">
-                              {blockEvidence.length} Evidence
-                            </span>
+                        {items.length > 0 && (
+                          <div className="rounded-full border border-neutral-700 bg-neutral-900/70 px-3 py-1">
+                            <span className="text-xs font-semibold text-neutral-200">{items.length} Evidence</span>
                           </div>
                         )}
                       </div>
 
-                      <div className="grid grid-cols-2 gap-4 text-sm">
+                      <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
                         <div>
-                          <p className="text-gray-500 mb-1">Block Hash</p>
-                          <p className="text-sapphire-500 font-mono text-xs break-all">
-                            {block.hash.slice(0, 16)}...
-                          </p>
+                          <p className="mb-1 text-neutral-500">Block hash</p>
+                          <p className="break-all font-mono text-xs text-neutral-200">{block.hash.slice(0, 16)}...</p>
                         </div>
                         <div>
-                          <p className="text-gray-500 mb-1">Previous Hash</p>
-                          <p className="text-gray-400 font-mono text-xs break-all">
-                            {block.previousHash.slice(0, 16)}...
-                          </p>
+                          <p className="mb-1 text-neutral-500">Previous hash</p>
+                          <p className="break-all font-mono text-xs text-neutral-400">{block.previousHash.slice(0, 16)}...</p>
                         </div>
                       </div>
 
-                      {(isHovered || isSelected) && blockEvidence.length > 0 && (
-                        <div className="mt-4 pt-4 border-t border-charcoal-800">
-                          <p className="text-gray-400 text-xs mb-2">Evidence in this block:</p>
+                      {(isHovered || isSelected) && items.length > 0 && (
+                        <div className="mt-4 border-t border-neutral-800 pt-4">
+                          <p className="mb-2 text-xs text-neutral-500">Evidence in this block</p>
                           <div className="space-y-1">
-                            {blockEvidence.map((e) => (
-                              <div key={e.id} className="text-xs text-gray-500">
+                            {items.map((e) => (
+                              <div key={e.id} className="text-xs text-neutral-500">
                                 • {e.caseId}: {e.fileName}
                               </div>
                             ))}
@@ -173,61 +118,53 @@ export default function VisualizerPage() {
         </div>
 
         <div className="lg:col-span-1">
-          <div className="bg-charcoal-900/50 border border-charcoal-800 rounded-lg p-6 sticky top-8">
-            <h2 className="text-xl font-semibold text-white mb-4 flex items-center">
-              <Shield className="w-5 h-5 mr-2 text-sapphire-500" />
-              Block Details
+          <div className="card sticky top-8 p-6">
+            <h2 className="mb-4 flex items-center text-xl font-semibold text-neutral-100">
+              <Shield className="mr-2 h-5 w-5 text-neutral-300" /> Block details
             </h2>
 
             {selectedBlock ? (
               <div className="space-y-4">
                 <div>
-                  <p className="text-gray-500 text-sm mb-1">Block Number</p>
-                  <p className="text-white font-semibold text-2xl">#{selectedBlock.blockNumber}</p>
+                  <p className="mb-1 text-sm text-neutral-500">Block number</p>
+                  <p className="text-2xl font-semibold text-neutral-100">#{selectedBlock.blockNumber}</p>
                 </div>
 
-                <div className="border-t border-charcoal-800 pt-4">
-                  <p className="text-gray-500 text-sm mb-2">Full Hash</p>
-                  <p className="text-sapphire-500 font-mono text-xs break-all bg-charcoal-950 p-3 rounded border border-charcoal-800">
+                <div className="border-t border-neutral-800 pt-4">
+                  <p className="mb-2 text-sm text-neutral-500">Full hash</p>
+                  <p className="break-all rounded border border-neutral-800 bg-neutral-950 p-3 font-mono text-xs text-neutral-200">
                     {selectedBlock.hash}
                   </p>
                 </div>
 
-                <div className="border-t border-charcoal-800 pt-4">
-                  <p className="text-gray-500 text-sm mb-2">Previous Hash</p>
-                  <p className="text-gray-400 font-mono text-xs break-all bg-charcoal-950 p-3 rounded border border-charcoal-800">
+                <div className="border-t border-neutral-800 pt-4">
+                  <p className="mb-2 text-sm text-neutral-500">Previous hash</p>
+                  <p className="break-all rounded border border-neutral-800 bg-neutral-950 p-3 font-mono text-xs text-neutral-400">
                     {selectedBlock.previousHash}
                   </p>
                 </div>
 
-                <div className="border-t border-charcoal-800 pt-4">
-                  <p className="text-gray-500 text-sm mb-2">Data Hash</p>
-                  <p className="text-gray-400 font-mono text-xs break-all bg-charcoal-950 p-3 rounded border border-charcoal-800">
+                <div className="border-t border-neutral-800 pt-4">
+                  <p className="mb-2 text-sm text-neutral-500">Data hash</p>
+                  <p className="break-all rounded border border-neutral-800 bg-neutral-950 p-3 font-mono text-xs text-neutral-400">
                     {selectedBlock.dataHash}
                   </p>
                 </div>
 
-                <div className="border-t border-charcoal-800 pt-4">
-                  <p className="text-gray-500 text-sm mb-1">Timestamp</p>
-                  <p className="text-white">
-                    {new Date(selectedBlock.timestamp).toLocaleDateString()}
-                  </p>
-                  <p className="text-gray-400 text-sm">
-                    {new Date(selectedBlock.timestamp).toLocaleTimeString()}
-                  </p>
+                <div className="border-t border-neutral-800 pt-4">
+                  <p className="mb-1 text-sm text-neutral-500">Timestamp</p>
+                  <p className="text-neutral-100">{new Date(selectedBlock.timestamp).toLocaleDateString()}</p>
+                  <p className="text-sm text-neutral-500">{new Date(selectedBlock.timestamp).toLocaleTimeString()}</p>
                 </div>
 
-                {getBlockEvidence(selectedBlock.id).length > 0 && (
-                  <div className="border-t border-charcoal-800 pt-4">
-                    <p className="text-gray-500 text-sm mb-2">Evidence Records</p>
+                {blockEvidence(selectedBlock.id).length > 0 && (
+                  <div className="border-t border-neutral-800 pt-4">
+                    <p className="mb-2 text-sm text-neutral-500">Evidence records</p>
                     <div className="space-y-2">
-                      {getBlockEvidence(selectedBlock.id).map((e) => (
-                        <div
-                          key={e.id}
-                          className="bg-charcoal-950 p-3 rounded border border-charcoal-800"
-                        >
-                          <p className="text-white text-sm font-medium">{e.caseId}</p>
-                          <p className="text-gray-400 text-xs mt-1">{e.fileName}</p>
+                      {blockEvidence(selectedBlock.id).map((e) => (
+                        <div key={e.id} className="rounded border border-neutral-800 bg-neutral-950 p-3">
+                          <p className="text-sm font-medium text-neutral-100">{e.caseId}</p>
+                          <p className="mt-1 text-xs text-neutral-500">{e.fileName}</p>
                         </div>
                       ))}
                     </div>
@@ -235,13 +172,45 @@ export default function VisualizerPage() {
                 )}
               </div>
             ) : (
-              <div className="text-center py-12">
-                <Lock className="w-12 h-12 text-gray-600 mx-auto mb-3" />
-                <p className="text-gray-500">Select a block to view details</p>
+              <div className="py-12 text-center">
+                <Lock className="mx-auto mb-3 h-12 w-12 text-neutral-500" />
+                <p className="text-neutral-500">Select a block to view details</p>
               </div>
             )}
           </div>
         </div>
+      </div>
+    </div>
+  );
+}
+
+function StatCard({ icon, label, value }: { icon: React.ReactNode; label: string; value: string }) {
+  return (
+    <div className="card flex items-start justify-between">
+      <span className="rounded-lg border border-neutral-800 bg-neutral-900/70 p-2 text-neutral-200">{icon}</span>
+      <div className="text-right">
+        <div className="text-2xl font-bold text-neutral-100">{value}</div>
+        <div className="text-sm text-neutral-500">{label}</div>
+      </div>
+    </div>
+  );
+}
+
+function IntegrityCard({ isValid }: { isValid: boolean }) {
+  return (
+    <div className="card flex items-center justify-between">
+      {isValid ? (
+        <span className="inline-flex items-center gap-2 rounded-full border border-emerald-500/40 bg-emerald-500/10 px-3 py-1 text-emerald-300">
+          <CheckCircle2 className="h-4 w-4" /> Valid
+        </span>
+      ) : (
+        <span className="inline-flex items-center gap-2 rounded-full border border-red-500/40 bg-red-500/10 px-3 py-1 text-red-300">
+          <AlertCircle className="h-4 w-4" /> Invalid
+        </span>
+      )}
+      <div className="text-right">
+        <div className={`text-2xl font-bold ${isValid ? 'text-emerald-300' : 'text-red-300'}`}>{isValid ? 'VALID' : 'INVALID'}</div>
+        <div className="text-sm text-neutral-500">Chain integrity</div>
       </div>
     </div>
   );

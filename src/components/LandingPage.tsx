@@ -1,193 +1,161 @@
-import { Shield, Lock, FileCheck, ArrowRight, CheckCircle2, Zap, Database } from 'lucide-react';
+import type { LucideIcon } from "lucide-react";
+import {
+  ArrowRight,
+  Database,
+  FileCheck,
+  Globe,
+  Lock,
+} from "lucide-react";
 
 interface LandingPageProps {
   onGetStarted: () => void;
 }
 
+interface Feature {
+  title: string;
+  description: string;
+  icon: LucideIcon;
+  bullets: string[];
+}
+
+const primaryFeatures: Feature[] = [
+  {
+    title: "Immutable Ledger Core",
+    description: "Anchors every evidence event to a tamper-proof, append-only ledger.",
+    icon: Database,
+    bullets: ["Creates a verifiable chain-of-custody", "Provides cryptographic proof of origin"],
+  },
+  {
+    title: "Zero-Trust Enforcement",
+    description: "Controls access using automated smart contracts.",
+    icon: Lock,
+    bullets: ["Enforces granular roles and access policies", "Sensitive records are protected by encryption."],
+  },
+  {
+    title: "Operational Assurance",
+    description: "Realtime integrity monitoring with intelligent dispute detection.",
+    icon: FileCheck,
+    bullets: ["Stores metadata on the blockchain and large files off-chain", "Adaptive compliance scoring"],
+  },
+];
+
+const logoSrc = new URL('../public/ledgis-logo.png', import.meta.url).href;
+
 export default function LandingPage({ onGetStarted }: LandingPageProps) {
   return (
-    <div className="min-h-screen bg-gradient-to-br from-charcoal-950 via-charcoal-900 to-sapphire-950">
-      <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(37,99,235,0.15),rgba(255,255,255,0))]"></div>
+    <div className="relative min-h-screen overflow-hidden bg-neutral-950 text-neutral-50">
+      <div
+        className="pointer-events-none absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.025)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.025)_1px,transparent_1px)] bg-[size:60px_60px]"
+        aria-hidden
+      />
+      <div className="pointer-events-none absolute inset-0">
+        <div className="absolute -left-32 top-20 h-80 w-80 rounded-full bg-neutral-800/30 blur-3xl animate-float" />
+        <div
+          className="absolute right-10 top-32 h-[26rem] w-[26rem] -translate-y-16 rounded-full bg-neutral-800/20 blur-3xl animate-float"
+          style={{ animationDelay: "1.8s" }}
+        />
+        <div
+          className="absolute left-1/2 top-3/4 h-72 w-72 -translate-x-1/2 rounded-full bg-neutral-900/40 blur-3xl animate-float"
+          style={{ animationDelay: "3.2s" }}
+        />
+      </div>
 
-      <header className="relative border-b border-white/5 backdrop-blur-xl bg-charcoal-900/30">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 py-5">
-          <div className="flex items-center justify-between">
-            <div className="flex items-center space-x-3">
-              <div className="relative">
-                <div className="absolute inset-0 bg-sapphire-500/20 blur-xl rounded-full"></div>
-                <div className="relative w-10 h-10 bg-gradient-to-br from-sapphire-500 to-sapphire-600 rounded-lg flex items-center justify-center">
-                  <Shield className="w-6 h-6 text-white" strokeWidth={2} />
-                </div>
-              </div>
-              <span className="text-xl font-bold bg-gradient-to-r from-white to-gray-300 bg-clip-text text-transparent">
-                LEDGIS
-              </span>
-            </div>
-            <button
-              onClick={onGetStarted}
-              className="px-6 py-2.5 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-lg transition-all duration-200 text-sm font-medium"
-            >
+      <header className="relative border-b border-neutral-800/60 bg-neutral-900/40 backdrop-blur-xl">
+        <div className="mx-auto flex max-w-7xl items-center justify-between px-6 py-5 lg:px-10">
+          <img src={logoSrc} alt="LEDGIS" className="h-10 w-auto" />
+
+          <div className="flex items-center gap-3">
+            <button className="btn-primary inline-flex items-center" onClick={onGetStarted}>
               Sign In
+              <ArrowRight className="ml-2 h-4 w-4" />
             </button>
           </div>
         </div>
       </header>
 
-      <main className="relative">
-        <section className="max-w-7xl mx-auto px-6 lg:px-8 pt-20 pb-24 lg:pt-32 lg:pb-32">
-          <div className="max-w-4xl mx-auto text-center">
-            <div className="inline-flex items-center space-x-2 px-4 py-2 bg-sapphire-500/10 border border-sapphire-500/20 rounded-full mb-8">
-              <Zap className="w-4 h-4 text-sapphire-400" />
-              <span className="text-sm text-sapphire-300 font-medium">Enterprise Blockchain Security</span>
+      <main>
+        <section className="relative overflow-hidden py-26 sm:py-32" id="solutions">
+          <div className="absolute inset-0 bg-gradient-radial from-neutral-900 via-neutral-950 to-neutral-950 opacity-80" aria-hidden />
+          <div className="absolute inset-x-0 top-12 mx-auto h-[460px] w-[460px] rounded-full bg-gradient-conic from-neutral-200/15 via-neutral-800/10 to-transparent blur-3xl" aria-hidden />
+
+          <div className="relative z-10 mx-auto grid max-w-6xl gap-16 px-6 lg:grid-cols-[1.1fr_0.9fr] lg:items-center lg:px-10">
+            <div className="space-y-8">
+              <div className="inline-flex items-center gap-3 rounded-full border border-neutral-700/60 bg-neutral-900/60 px-4 py-2 text-sm text-neutral-300 shadow-sm shadow-black/40">
+                <span className="h-2 w-2 rounded-full bg-emerald-400 animate-pulse" />
+                Secure • Decentralized • Immutable
+              </div>
+              <div className="space-y-6">
+                <h1 className="text-4xl font-semibold leading-tight tracking-tight text-neutral-50 sm:text-5xl lg:text-6xl">
+                  LEDGIS
+                </h1>
+                <p className="text-lg leading-relaxed text-neutral-400 sm:text-xl">
+                  A Blockchain-Based Framework for Secure Management of Government and Law Enforcement Records
+                </p>
+              </div>
+              <div className="flex flex-col gap-3 sm:flex-row">
+                <button className="btn-primary inline-flex items-center justify-center gap-2" onClick={onGetStarted}>
+                  Get started
+                  <ArrowRight className="h-4 w-4" />
+                </button>
+              </div>
             </div>
 
-            <h1 className="text-5xl md:text-6xl lg:text-7xl font-bold text-white mb-6 leading-tight tracking-tight">
-              Law Enforcement
-              <br />
-              <span className="bg-gradient-to-r from-sapphire-400 to-blue-400 bg-clip-text text-transparent">
-                Records. Secured.
-              </span>
-            </h1>
-
-            <p className="text-xl text-gray-400 mb-10 leading-relaxed max-w-2xl mx-auto">
-              Immutable blockchain technology ensuring complete transparency and security for critical evidence management.
-            </p>
-
-            <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <button
-                onClick={onGetStarted}
-                className="group px-8 py-4 bg-sapphire-600 hover:bg-sapphire-700 text-white rounded-lg transition-all duration-200 text-base font-semibold shadow-lg shadow-sapphire-500/25 hover:shadow-sapphire-500/40 hover:scale-105 flex items-center space-x-2"
-              >
-                <span>Get Started</span>
-                <ArrowRight className="w-5 h-5 group-hover:translate-x-1 transition-transform" />
-              </button>
-              <button className="px-8 py-4 bg-white/5 hover:bg-white/10 border border-white/10 text-white rounded-lg transition-all duration-200 text-base font-semibold">
-                View Documentation
-              </button>
-            </div>
-
-            <div className="mt-16 grid grid-cols-3 gap-8 max-w-2xl mx-auto">
-              <div className="text-center">
-                <div className="text-3xl font-bold text-white mb-1">99.9%</div>
-                <div className="text-sm text-gray-500">Uptime</div>
-              </div>
-              <div className="text-center border-x border-white/10">
-                <div className="text-3xl font-bold text-white mb-1">10k+</div>
-                <div className="text-sm text-gray-500">Records</div>
-              </div>
-              <div className="text-center">
-                <div className="text-3xl font-bold text-white mb-1">256-bit</div>
-                <div className="text-sm text-gray-500">Encryption</div>
+            <div className="relative flex h-full w-full items-center justify-center">
+              <div className="relative flex h-[380px] w-[380px] items-center justify-center rounded-full border border-neutral-800/70 bg-neutral-950/60 shadow-[0_40px_140px_-70px_rgba(0,0,0,0.85)]">
+                <div className="absolute inset-6 rounded-full border border-neutral-800/40" />
+                <div className="absolute inset-12 rounded-full border border-neutral-800/20" />
+                <div className="absolute inset-0 flex items-center justify-center">
+                  <div className="flex h-32 w-32 items-center justify-center rounded-full bg-neutral-100 text-neutral-900 shadow-[0_30px_60px_-38px_rgba(255,255,255,0.45)]">
+                    <Globe className="h-14 w-14 animate-spin-slow" />
+                  </div>
+                </div>
+                <span className="absolute left-1/2 top-4 h-2 w-2 -translate-x-1/2 rounded-full bg-neutral-200 shadow-[0_10px_30px_rgba(255,255,255,0.35)] animate-float" />
+                <span className="absolute bottom-4 left-1/2 h-2 w-2 -translate-x-1/2 rounded-full bg-emerald-300 shadow-[0_10px_40px_rgba(16,185,129,0.35)] animate-float" style={{ animationDelay: "1.2s" }} />
+                <span className="absolute left-6 top-1/2 h-2 w-2 -translate-y-1/2 rounded-full bg-neutral-400/80 animate-float" style={{ animationDelay: "2.1s" }} />
+                <span className="absolute right-6 top-1/3 h-2 w-2 rounded-full bg-neutral-300/80 animate-float" style={{ animationDelay: "2.8s" }} />
               </div>
             </div>
           </div>
         </section>
 
-        <section className="max-w-7xl mx-auto px-6 lg:px-8 pb-24 lg:pb-32">
-          <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-            <div className="group relative bg-gradient-to-br from-charcoal-900/90 to-charcoal-900/50 border border-white/10 rounded-2xl p-8 hover:border-sapphire-500/30 transition-all duration-300 overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-br from-sapphire-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              <div className="relative">
-                <div className="w-12 h-12 bg-sapphire-500/10 border border-sapphire-500/20 rounded-xl flex items-center justify-center mb-5 group-hover:scale-110 transition-transform duration-300">
-                  <Lock className="w-6 h-6 text-sapphire-400" />
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-3">End-to-End Encryption</h3>
-                <p className="text-gray-400 leading-relaxed mb-6">
-                  Military-grade encryption protects all evidence files from unauthorized access and tampering.
+        <section className="border-t border-neutral-900/60 bg-neutral-900/20 py-24" id="features">
+          <div className="mx-auto max-w-6xl px-6 lg:px-10">
+            <div className="mb-12 flex flex-col gap-6 sm:flex-row sm:items-end sm:justify-between">
+              <div className="max-w-3xl space-y-4">
+                <p className="text-sm uppercase tracking-[0.4em] text-neutral-500">Core platform pillars</p>
+                <h2 className="text-3xl font-semibold text-neutral-100 sm:text-4xl">Built for forensic-grade reliability</h2>
+                <p className="text-neutral-400">
+                This framework is designed to manage legal and law enforcement records by focusing on three main goals: making sure the evidence is reliable, enforcing strict security, and guaranteeing smooth operations.
                 </p>
-                <ul className="space-y-2">
-                  <li className="flex items-center text-sm text-gray-500">
-                    <CheckCircle2 className="w-4 h-4 mr-2 text-sapphire-500" />
-                    AES-256 encryption
-                  </li>
-                  <li className="flex items-center text-sm text-gray-500">
-                    <CheckCircle2 className="w-4 h-4 mr-2 text-sapphire-500" />
-                    Zero-knowledge architecture
-                  </li>
-                </ul>
               </div>
             </div>
 
-            <div className="group relative bg-gradient-to-br from-charcoal-900/90 to-charcoal-900/50 border border-white/10 rounded-2xl p-8 hover:border-sapphire-500/30 transition-all duration-300 overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-br from-sapphire-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              <div className="relative">
-                <div className="w-12 h-12 bg-sapphire-500/10 border border-sapphire-500/20 rounded-xl flex items-center justify-center mb-5 group-hover:scale-110 transition-transform duration-300">
-                  <Database className="w-6 h-6 text-sapphire-400" />
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-3">Immutable Ledger</h3>
-                <p className="text-gray-400 leading-relaxed mb-6">
-                  Blockchain technology ensures evidence records cannot be altered, maintaining perfect chain of custody.
-                </p>
-                <ul className="space-y-2">
-                  <li className="flex items-center text-sm text-gray-500">
-                    <CheckCircle2 className="w-4 h-4 mr-2 text-sapphire-500" />
-                    Permanent audit trail
-                  </li>
-                  <li className="flex items-center text-sm text-gray-500">
-                    <CheckCircle2 className="w-4 h-4 mr-2 text-sapphire-500" />
-                    Tamper-proof storage
-                  </li>
-                </ul>
-              </div>
-            </div>
-
-            <div className="group relative bg-gradient-to-br from-charcoal-900/90 to-charcoal-900/50 border border-white/10 rounded-2xl p-8 hover:border-sapphire-500/30 transition-all duration-300 overflow-hidden">
-              <div className="absolute inset-0 bg-gradient-to-br from-sapphire-500/5 to-transparent opacity-0 group-hover:opacity-100 transition-opacity"></div>
-              <div className="relative">
-                <div className="w-12 h-12 bg-sapphire-500/10 border border-sapphire-500/20 rounded-xl flex items-center justify-center mb-5 group-hover:scale-110 transition-transform duration-300">
-                  <FileCheck className="w-6 h-6 text-sapphire-400" />
-                </div>
-                <h3 className="text-xl font-semibold text-white mb-3">Complete Transparency</h3>
-                <p className="text-gray-400 leading-relaxed mb-6">
-                  Full visibility and verification for all stakeholders with comprehensive audit capabilities.
-                </p>
-                <ul className="space-y-2">
-                  <li className="flex items-center text-sm text-gray-500">
-                    <CheckCircle2 className="w-4 h-4 mr-2 text-sapphire-500" />
-                    Real-time verification
-                  </li>
-                  <li className="flex items-center text-sm text-gray-500">
-                    <CheckCircle2 className="w-4 h-4 mr-2 text-sapphire-500" />
-                    Detailed activity logs
-                  </li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        <section className="max-w-7xl mx-auto px-6 lg:px-8 pb-24">
-          <div className="relative bg-gradient-to-br from-sapphire-600/10 to-blue-600/10 border border-sapphire-500/20 rounded-3xl p-12 lg:p-16 overflow-hidden">
-            <div className="absolute inset-0 bg-[radial-gradient(ellipse_80%_80%_at_50%_-20%,rgba(37,99,235,0.3),rgba(255,255,255,0))]"></div>
-            <div className="relative text-center">
-              <h2 className="text-3xl lg:text-4xl font-bold text-white mb-4">
-                Ready to secure your evidence?
-              </h2>
-              <p className="text-gray-400 mb-8 text-lg max-w-2xl mx-auto">
-                Join law enforcement agencies using blockchain technology to protect critical evidence.
-              </p>
-              <button
-                onClick={onGetStarted}
-                className="px-8 py-4 bg-white hover:bg-gray-100 text-charcoal-900 rounded-lg transition-all duration-200 text-base font-semibold hover:scale-105"
-              >
-                Get Started Now
-              </button>
+            <div className="grid gap-6 md:grid-cols-3">
+              {primaryFeatures.map((feature) => (
+                <article
+                  key={feature.title}
+                  className="group relative overflow-hidden rounded-2xl border border-neutral-800/60 bg-neutral-950/60 p-8 shadow-[0_25px_80px_-50px_rgba(0,0,0,0.7)] transition-transform duration-300 hover:-translate-y-1"
+                >
+                  <div className="absolute inset-0 bg-gradient-to-br from-neutral-100/5 via-transparent to-transparent opacity-0 transition-opacity duration-300 group-hover:opacity-100" />
+                  <span className="mb-6 inline-flex h-12 w-12 items-center justify-center rounded-xl bg-neutral-200 text-neutral-900">
+                    <feature.icon className="h-6 w-6" />
+                  </span>
+                  <h3 className="mb-3 text-xl font-semibold text-neutral-100">{feature.title}</h3>
+                  <p className="mb-6 text-sm leading-relaxed text-neutral-400">{feature.description}</p>
+                  <ul className="space-y-2 text-sm text-neutral-300/90">
+                    {feature.bullets.map((bullet) => (
+                      <li key={bullet} className="flex items-center gap-2">
+                        <span className="h-1.5 w-1.5 rounded-full bg-neutral-200" />
+                        {bullet}
+                      </li>
+                    ))}
+                  </ul>
+                </article>
+              ))}
             </div>
           </div>
         </section>
       </main>
-
-      <footer className="relative border-t border-white/5">
-        <div className="max-w-7xl mx-auto px-6 lg:px-8 py-8">
-          <div className="flex flex-col md:flex-row items-center justify-between text-sm text-gray-500 space-y-4 md:space-y-0">
-            <p>© 2024 LEDGIS. All rights reserved.</p>
-            <div className="flex items-center space-x-2">
-              <Shield className="w-4 h-4" />
-              <span>Powered by Blockchain Technology</span>
-            </div>
-          </div>
-        </div>
-      </footer>
     </div>
   );
 }
