@@ -1,4 +1,4 @@
-import { Globe2, Layers, LogOut, Menu, Search, Upload, X } from 'lucide-react';
+import { Download, Globe2, Layers, LogOut, Menu, Search, Upload, X } from 'lucide-react';
 import { useState } from 'react';
 import { Node, PageType } from '../types';
 
@@ -16,8 +16,9 @@ export default function Layout({ children, currentPage, onNavigate, onLogout, cu
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const navItems = [
-    { id: 'upload' as PageType, label: 'Upload', icon: Upload, description: 'Add new evidence to the ledger' },
-    { id: 'retrieve' as PageType, label: 'Retrieve', icon: Search, description: 'Search notarised records' },
+  { id: 'upload' as PageType, label: 'Upload', icon: Upload, description: 'Add new evidence to the ledger' },
+  { id: 'file-validity' as PageType, label: 'File Validity', icon: Search, description: 'Verify chunk integrity' },
+  { id: 'download' as PageType, label: 'Download File', icon: Download, description: 'Reconstruct notarised artefacts' },
     { id: 'visualizer' as PageType, label: 'Visualizer', icon: Layers, description: 'Inspect blockchain flow' },
     { id: 'global-map' as PageType, label: 'Global Map', icon: Globe2, description: 'Track shard distribution worldwide' },
   ];

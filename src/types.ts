@@ -30,6 +30,7 @@ export interface EvidenceRecord {
   blockId: string;
   createdAt: string;
   uploaderName?: string;
+  fileContent?: string;
 }
 
 export interface UploadProgress {
@@ -38,4 +39,4 @@ export interface UploadProgress {
   status: 'uploading' | 'completed' | 'error';
 }
 
-export type PageType = 'login' | 'upload' | 'retrieve' | 'visualizer' | 'global-map';
+export type PageType = 'login' | 'upload' | 'file-validity' | 'download' | 'visualizer' | 'global-map';

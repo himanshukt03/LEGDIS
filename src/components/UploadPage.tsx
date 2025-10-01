@@ -12,13 +12,49 @@ export default function UploadPage({ currentNode }: UploadPageProps) {
   const [caseId, setCaseId] = useState('');
   const [description, setDescription] = useState('');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [fileContent, setFileContent] = useState<string | null>(null);
+  const [fileReadError, setFileReadError] = useState<string | null>(null);
   const [isDragging, setIsDragging] = useState(false);
   const [uploadProgress, setUploadProgress] = useState<UploadProgress | null>(null);
   const [recentUploads, setRecentUploads] = useState<EvidenceRecord[]>([]);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const handleFileSelection = (file: File | null) => {
+    setFileReadError(null);
+    setSelectedFile(file);
+    setFileContent(null);
+
+    if (!file) {
+      return;
+    }
+
+    const reader = new FileReader();
+    reader.onload = () => {
+      const result = reader.result;
+      if (typeof result === 'string') {
+        const base64 = result.split(',')[1] ?? '';
+        setFileContent(base64);
+      } else {
+        setFileReadError('Unable to process the selected file.');
+      }
+    };
+    reader.onerror = () => {
+      setFileReadError('Unable to process the selected file.');
+      setFileContent(null);
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const isFileReady = Boolean(selectedFile && fileContent);
+
   const beginUpload = () => {
     if (!selectedFile) return;
+    if (!fileContent) {
+      setFileReadError('File is still being prepared. Please wait a moment.');
+      return;
+    }
+
+    setFileReadError(null);
 
     setUploadProgress({ fileName: selectedFile.name, progress: 0, status: 'uploading' });
 
@@ -51,6 +87,7 @@ export default function UploadPage({ currentNode }: UploadPageProps) {
         uploaderName: currentNode.name,
         blockId: newBlock.id,
         createdAt: new Date().toISOString(),
+        fileContent,
       };
 
       storage.addEvidence(record);
@@ -63,6 +100,8 @@ export default function UploadPage({ currentNode }: UploadPageProps) {
         setCaseId('');
         setDescription('');
         setSelectedFile(null);
+        setFileContent(null);
+        setFileReadError(null);
         if (fileInputRef.current) fileInputRef.current.value = '';
       }, 1500);
     }, 2000);
@@ -70,7 +109,7 @@ export default function UploadPage({ currentNode }: UploadPageProps) {
 
   const handleSubmit = (event: React.FormEvent) => {
     event.preventDefault();
-    if (!caseId || !description || !selectedFile) return;
+    if (!caseId || !description || !selectedFile || !fileContent) return;
     beginUpload();
   };
 
@@ -91,7 +130,9 @@ export default function UploadPage({ currentNode }: UploadPageProps) {
             event.preventDefault();
             setIsDragging(false);
             const file = event.dataTransfer.files[0];
-            if (file) setSelectedFile(file);
+            if (file) {
+              handleFileSelection(file);
+            }
           }}
           onClick={() => fileInputRef.current?.click()}
           className={`rounded-2xl border border-dashed px-5 py-10 text-center transition ${
@@ -102,7 +143,12 @@ export default function UploadPage({ currentNode }: UploadPageProps) {
               : 'border-neutral-800 hover:border-neutral-600 hover:bg-neutral-900/50'
           }`}
         >
-          <input ref={fileInputRef} type="file" onChange={(event) => setSelectedFile(event.target.files?.[0] ?? null)} className="hidden" />
+          <input
+            ref={fileInputRef}
+            type="file"
+            onChange={(event) => handleFileSelection(event.target.files?.[0] ?? null)}
+            className="hidden"
+          />
           <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-neutral-700/70 bg-neutral-900/70">
             <Upload className="h-8 w-8 text-neutral-200" />
           </div>
@@ -115,6 +161,10 @@ export default function UploadPage({ currentNode }: UploadPageProps) {
               <p className="font-medium text-neutral-100">{selectedFile.name}</p>
               <p className="text-neutral-500">{(selectedFile.size / 1024).toFixed(1)} KB · {selectedFile.type || 'unknown type'}</p>
             </div>
+          )}
+          {fileReadError && <p className="mt-3 text-sm text-red-400">{fileReadError}</p>}
+          {selectedFile && !fileReadError && !fileContent && (
+            <p className="mt-3 text-sm text-neutral-500">Preparing encrypted payload…</p>
           )}
         </div>
 
@@ -161,7 +211,7 @@ export default function UploadPage({ currentNode }: UploadPageProps) {
 
         <button
           type="submit"
-          disabled={!caseId || !description || !selectedFile || uploadProgress !== null}
+          disabled={!caseId || !description || !isFileReady || uploadProgress !== null}
           className="btn-primary w-full justify-center disabled:cursor-not-allowed disabled:opacity-60"
         >
           Commit evidence to ledger

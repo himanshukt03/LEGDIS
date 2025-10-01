@@ -2,7 +2,8 @@ import { useState, useEffect } from 'react';
 import LandingPage from './components/LandingPage';
 import LoginPage from './components/LoginPage';
 import UploadPage from './components/UploadPage';
-import RetrievePage from './components/RetrievePage';
+import FileValidityPage from './components/FileValidityPage';
+import DownloadPage from './components/DownloadPage';
 import VisualizerPage from './components/VisualizerPage';
 import GlobalMapPage from './components/GlobalMapPage';
 import Layout from './components/Layout';
@@ -69,7 +70,8 @@ function App() {
       currentNode={currentNode}
     >
       {currentPage === 'upload' && <UploadPage currentNode={currentNode} />}
-      {currentPage === 'retrieve' && <RetrievePage />}
+  {currentPage === 'file-validity' && <FileValidityPage />}
+  {currentPage === 'download' && <DownloadPage />}
       {currentPage === 'visualizer' && <VisualizerPage />}
       {currentPage === 'global-map' && <GlobalMapPage />}
     </Layout>
