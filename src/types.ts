@@ -38,4 +38,4 @@ export interface UploadProgress {
   status: 'uploading' | 'completed' | 'error';
 }
 
-export type PageType = 'login' | 'upload' | 'retrieve' | 'visualizer';
+export type PageType = 'login' | 'upload' | 'retrieve' | 'visualizer' | 'global-map';

@@ -4,6 +4,7 @@ import LoginPage from './components/LoginPage';
 import UploadPage from './components/UploadPage';
 import RetrievePage from './components/RetrievePage';
 import VisualizerPage from './components/VisualizerPage';
+import GlobalMapPage from './components/GlobalMapPage';
 import Layout from './components/Layout';
 import { Node, PageType } from './types';
 import { storage } from './lib/storage';
@@ -70,6 +71,7 @@ function App() {
       {currentPage === 'upload' && <UploadPage currentNode={currentNode} />}
       {currentPage === 'retrieve' && <RetrievePage />}
       {currentPage === 'visualizer' && <VisualizerPage />}
+      {currentPage === 'global-map' && <GlobalMapPage />}
     </Layout>
   );
 }
