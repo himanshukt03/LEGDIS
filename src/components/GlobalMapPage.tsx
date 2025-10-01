@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { Activity, CloudLightning, Globe2, Layers, MapPin, ShieldCheck, Zap } from 'lucide-react';
+import { CloudLightning, Globe2, Layers, MapPin, ShieldCheck, Zap } from 'lucide-react';
 import { storage } from '../lib/storage';
 import type { EvidenceRecord } from '../types';
 
@@ -160,7 +160,7 @@ export default function GlobalMapPage() {
     setEvidence(storage.getEvidence());
   }, []);
 
-  const { metrics, totals, events } = useMemo(() => computeDistribution(evidence), [evidence]);
+  const { metrics, totals} = useMemo(() => computeDistribution(evidence), [evidence]);
 
   const activeLocations = metrics.filter((metric) => metric.shards > 0.35);
   const regionsCovered = new Set(activeLocations.map((metric) => metric.region)).size;

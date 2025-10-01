@@ -1,4 +1,4 @@
-import { Activity, Globe2, Layers, LogOut, Menu, Search, Upload, X } from 'lucide-react';
+import { Globe2, Layers, LogOut, Menu, Search, Upload, X } from 'lucide-react';
 import { useState } from 'react';
 import { Node, PageType } from '../types';
 
