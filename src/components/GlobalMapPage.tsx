@@ -1,8 +1,17 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { CSSProperties } from 'react';
-import { CloudLightning, Globe2, Layers, MapPin, ShieldCheck, Zap } from 'lucide-react';
-import { storage } from '../lib/storage';
-import type { EvidenceRecord } from '../types';
+import {
+  AlertTriangle,
+  CloudLightning,
+  Globe2,
+  Layers,
+  Loader2,
+  MapPin,
+  RefreshCw,
+  ShieldCheck,
+  Zap,
+} from 'lucide-react';
+import { apiRequest, ApiError } from '../lib/api';
 
 interface MapLocation {
   id: string;
@@ -15,71 +24,66 @@ interface MapLocation {
   color: string;
 }
 
+type NodeStatus = 'active' | 'standby' | 'offline';
+
 interface LocationMetric extends MapLocation {
   shards: number;
   dataVolume: number;
   availability: number;
   latency: number;
+  status: NodeStatus;
 }
 
-interface ShardEvent {
+interface HealthStats {
+  shardsTotal?: number;
+  payloadMb?: number;
+  jurisdictionsActive?: number;
+  nodesOnline?: number;
+  nodesTotal?: number;
+}
+
+interface LatencyStats {
+  averageMs?: number;
+  p95Ms?: number;
+  p99Ms?: number;
+}
+
+interface HealthNode {
   id: string;
-  locationId: string;
-  locationLabel: string;
-  timestamp: string;
-  description: string;
-  chunkCount: number;
+  label?: string;
+  region?: string;
+  iso?: string;
+  locationId?: string;
+  coordinates?: {
+    x: number;
+    y: number;
+  };
+  shards?: number;
+  dataMb?: number;
+  availability?: number;
+  latencyMs?: number;
+  status?: string;
+}
+
+interface HealthResponse {
+  healthy?: boolean;
+  updatedAt?: string;
+  stats?: HealthStats;
+  latency?: LatencyStats;
+  nodes?: HealthNode[];
 }
 
 const mapLocations: MapLocation[] = [
   { id: 'nyc', label: 'US-East Authority', x: 33, y: 38, region: 'North America', iso: 'USA', latencyRange: [28, 42], color: 'rgba(96, 165, 250, 0.9)' },
   { id: 'mtl', label: 'Canadian Custody Mesh', x: 30, y: 27, region: 'North America', iso: 'CAN', latencyRange: [34, 48], color: 'rgba(129, 140, 248, 0.9)' },
-  { id: 'lon', label: 'UK Sovereign Vault', x: 52, y: 32, region: 'Europe', iso: 'GBR', latencyRange: [22, 36], color: 'rgba(14, 165, 233, 0.9)' },
-  { id: 'fra', label: 'EU Evidence Ring', x: 57, y: 39, region: 'Europe', iso: 'DEU', latencyRange: [26, 34], color: 'rgba(34, 197, 94, 0.9)' },
-  { id: 'auh', label: 'Middle East Chain Terminal', x: 68, y: 46, region: 'Middle East', iso: 'ARE', latencyRange: [48, 66], color: 'rgba(74, 222, 128, 0.88)' },
-  { id: 'mum', label: 'India Compliance Grid', x: 71, y: 54, region: 'Asia', iso: 'IND', latencyRange: [52, 72], color: 'rgba(16, 185, 129, 0.88)' },
-  { id: 'sin', label: 'APAC Transparency Edge', x: 78, y: 60, region: 'Asia', iso: 'SGP', latencyRange: [60, 78], color: 'rgba(45, 212, 191, 0.9)' },
-  { id: 'syd', label: 'Australia Forensic Hub', x: 85, y: 76, region: 'Oceania', iso: 'AUS', latencyRange: [88, 112], color: 'rgba(56, 189, 248, 0.85)' },
-  { id: 'bog', label: 'LATAM Evidence Spine', x: 24, y: 60, region: 'South America', iso: 'COL', latencyRange: [68, 96], color: 'rgba(59, 130, 246, 0.88)' },
+  { id: 'lon', label: 'UK Sovereign Vault', x: 52, y: 32, region: 'Europe', iso: 'GBR', latencyRange: [22, 36], color: 'rgba(14, 165, 233, 0.9)' }
 ];
 
 const mapConnections: [string, string][] = [
   ['nyc', 'lon'],
   ['nyc', 'fra'],
-  ['lon', 'fra'],
-  ['fra', 'auh'],
-  ['auh', 'mum'],
-  ['mum', 'sin'],
-  ['sin', 'syd'],
-  ['nyc', 'mtl'],
-  ['mtl', 'bog'],
+  ['lon', 'fra']
 ];
-
-function hashSeed(seed: string): number {
-  let hash = 0;
-  for (let index = 0; index < seed.length; index += 1) {
-    hash = (hash * 31 + seed.charCodeAt(index)) % 1_000_000_007;
-  }
-  return hash;
-}
-
-function seededFloat(seed: string): number {
-  return (hashSeed(seed) % 10_000) / 10_000;
-}
-
-function selectUniqueIndexes(seed: string, count: number, limit: number): number[] {
-  const indexSet = new Set<number>();
-  let attempt = 0;
-  while (indexSet.size < Math.min(count, limit)) {
-    const candidate = (hashSeed(`${seed}-${attempt}`) + attempt * 7) % limit;
-    indexSet.add(candidate);
-    attempt += 1;
-    if (attempt > 50) {
-      break;
-    }
-  }
-  return Array.from(indexSet);
-}
 
 function tintColor(color: string, intensity: number): string {
   const match = color.match(/rgba?\(([^)]+)\)/);
@@ -92,100 +96,261 @@ function tintColor(color: string, intensity: number): string {
   return `rgba(${r}, ${g}, ${b}, ${alpha})`;
 }
 
-function computeDistribution(records: EvidenceRecord[]) {
-  const metrics: LocationMetric[] = mapLocations.map((location) => ({
-    ...location,
-    shards: 0,
-    dataVolume: 0,
-    availability: 99.97,
-    latency: (location.latencyRange[0] + location.latencyRange[1]) / 2,
-  }));
+function isFiniteNumber(value: unknown): value is number {
+  return typeof value === 'number' && Number.isFinite(value);
+}
 
-  const events: ShardEvent[] = [];
+function resolveNodeStatus(status?: string): NodeStatus {
+  if (!status) return 'standby';
+  const normalised = status.toLowerCase();
+  if (['active', 'online', 'healthy', 'green'].includes(normalised)) return 'active';
+  if (['offline', 'down', 'red'].includes(normalised)) return 'offline';
+  return 'standby';
+}
 
-  records.forEach((record) => {
-    const seed = `${record.id}-${record.blockId ?? ''}`;
-    const chunkEstimateBase = record.fileSize > 0 ? record.fileSize / 1_200_000 : record.fileName.length / 4;
-    const chunkCount = Math.max(3, Math.min(12, Math.round(chunkEstimateBase) + 3));
-    const dataVolumeMb = (record.fileSize || record.fileName.length * 2_048) / (1024 * 1024);
+function prioritiseStatus(current: NodeStatus, incoming: NodeStatus): NodeStatus {
+  if (incoming === 'active') return 'active';
+  if (incoming === 'standby' && current === 'offline') return 'standby';
+  if (incoming === 'offline' && current !== 'active') return 'offline';
+  return current;
+}
 
-    const nodeIndexes = selectUniqueIndexes(seed, 3, metrics.length);
-
-    nodeIndexes.forEach((index, position) => {
-      const metric = metrics[index];
-      const share = chunkCount / nodeIndexes.length;
-      metric.shards += share;
-      metric.dataVolume += dataVolumeMb / nodeIndexes.length;
-      const projectedLatency = metric.latencyRange[0] + seededFloat(`${seed}-${metric.id}-${position}`) * (metric.latencyRange[1] - metric.latencyRange[0]);
-      metric.latency = metric.latency * 0.65 + projectedLatency * 0.35;
-      metric.availability = 99.94 + seededFloat(`${metric.id}-${seed}`) * 0.05;
-    });
-
-    if (nodeIndexes.length > 0) {
-      const primary = metrics[nodeIndexes[0]];
-      events.push({
-        id: record.id,
-        locationId: primary.id,
-        locationLabel: primary.label,
-        timestamp: record.createdAt,
-        description: `${chunkCount} shards anchored across ${nodeIndexes.length} jurisdictions`,
-        chunkCount,
-      });
+function resolveBaseLocation(node: HealthNode): MapLocation | null {
+  if (node.locationId) {
+    const match = mapLocations.find((location) => location.id === node.locationId);
+    if (match) {
+      return match;
     }
+  }
+
+  if (node.iso) {
+    const match = mapLocations.find((location) => location.iso.toLowerCase() === node.iso!.toLowerCase());
+    if (match) {
+      return match;
+    }
+  }
+
+  if (node.label) {
+    const match = mapLocations.find((location) => location.label.toLowerCase() === node.label!.toLowerCase());
+    if (match) {
+      return match;
+    }
+  }
+
+  if (node.coordinates) {
+    const latencyEstimate = isFiniteNumber(node.latencyMs) ? node.latencyMs : 60;
+    return {
+      id: node.id,
+      label: node.label ?? node.id,
+      x: Math.min(Math.max(node.coordinates.x, 0), 100),
+      y: Math.min(Math.max(node.coordinates.y, 0), 100),
+      region: node.region ?? 'Unspecified region',
+      iso: node.iso ?? node.id.toUpperCase(),
+      latencyRange: [Math.max(latencyEstimate - 20, 10), latencyEstimate + 20],
+      color: 'rgba(125, 211, 252, 0.85)',
+    };
+  }
+
+  return null;
+}
+
+function buildLocationMetrics(nodes: HealthNode[]): { metrics: LocationMetric[]; unmapped: number } {
+  const aggregation = new Map<string, LocationMetric>();
+  let unmapped = 0;
+
+  nodes.forEach((node) => {
+    const baseLocation = resolveBaseLocation(node);
+    if (!baseLocation) {
+      unmapped += 1;
+      return;
+    }
+
+    const existing = aggregation.get(baseLocation.id) ?? {
+      ...baseLocation,
+      shards: 0,
+      dataVolume: 0,
+      availability: 0,
+      latency: (baseLocation.latencyRange[0] + baseLocation.latencyRange[1]) / 2,
+      status: 'standby' as NodeStatus,
+    };
+
+    if (node.label) {
+      existing.label = node.label;
+    }
+    if (node.region) {
+      existing.region = node.region;
+    }
+    if (node.iso) {
+      existing.iso = node.iso;
+    }
+
+    const shards = isFiniteNumber(node.shards) ? node.shards : 0;
+    const data = isFiniteNumber(node.dataMb) ? node.dataMb : 0;
+    const availability = isFiniteNumber(node.availability) ? node.availability : null;
+    const latency = isFiniteNumber(node.latencyMs) ? node.latencyMs : null;
+    const status = resolveNodeStatus(node.status);
+
+    existing.shards += shards;
+    existing.dataVolume += data;
+
+    if (availability != null) {
+      existing.availability = availability;
+    } else if (existing.availability <= 0) {
+      existing.availability = 99.9;
+    }
+
+    if (latency != null) {
+      existing.latency = existing.latency > 0 ? (existing.latency * 0.7 + latency * 0.3) : latency;
+    }
+
+    existing.status = prioritiseStatus(existing.status, status);
+
+    aggregation.set(baseLocation.id, existing);
   });
 
-  const totalShards = metrics.reduce((sum, metric) => sum + metric.shards, 0);
-  const totalDataVolume = metrics.reduce((sum, metric) => sum + metric.dataVolume, 0);
-  const avgLatency = totalShards > 0
-    ? metrics.reduce((sum, metric) => sum + metric.latency * metric.shards, 0) / totalShards
-    : metrics.length > 0
-      ? metrics.reduce((sum, metric) => sum + metric.latency, 0) / metrics.length
-      : 0;
+  const metrics = Array.from(aggregation.values()).map((metric) => ({
+    ...metric,
+    availability: metric.availability > 0 ? metric.availability : 99.9,
+  }));
+
+  if (metrics.length === 0) {
+    return {
+      metrics: mapLocations.map((location) => ({
+        ...location,
+        shards: 0,
+        dataVolume: 0,
+        availability: 99.9,
+        latency: (location.latencyRange[0] + location.latencyRange[1]) / 2,
+        status: 'standby',
+      })),
+      unmapped,
+    };
+  }
+
+  return { metrics, unmapped };
+}
+
+function computeTotals(
+  stats: HealthStats | undefined,
+  latency: LatencyStats | undefined,
+  metrics: LocationMetric[],
+): { totalShards: number; totalDataVolume: number; avgLatency: number; nodesOnline?: number; nodesTotal?: number; jurisdictions: number } {
+  const inferredShards = metrics.reduce((sum, metric) => sum + metric.shards, 0);
+  const inferredData = metrics.reduce((sum, metric) => sum + metric.dataVolume, 0);
+  const inferredLatency = metrics.length
+    ? metrics.reduce((sum, metric) => sum + metric.latency, 0) / metrics.length
+    : 0;
+
+  const jurisdictions = stats?.jurisdictionsActive ?? new Set(metrics.filter((metric) => metric.shards > 0).map((metric) => metric.region)).size;
 
   return {
-    metrics,
-    totals: {
-      totalShards,
-      totalDataVolume,
-      avgLatency,
-    },
-    events: events.sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()).slice(0, 6),
+    totalShards: stats?.shardsTotal ?? inferredShards,
+    totalDataVolume: stats?.payloadMb ?? inferredData,
+    avgLatency: latency?.averageMs ?? inferredLatency,
+    nodesOnline: stats?.nodesOnline,
+    nodesTotal: stats?.nodesTotal,
+    jurisdictions,
   };
 }
 
 export default function GlobalMapPage() {
-  const [evidence, setEvidence] = useState<EvidenceRecord[]>([]);
+  const [status, setStatus] = useState<'loading' | 'success' | 'error'>('loading');
+  const [health, setHealth] = useState<HealthResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
-  useEffect(() => {
-    setEvidence(storage.getEvidence());
+  const fetchHealth = useCallback(async (background = false) => {
+    if (background) {
+      setIsRefreshing(true);
+    } else {
+      setStatus('loading');
+    }
+    setError(null);
+
+    try {
+      const response = await apiRequest<HealthResponse>('/health');
+      setHealth(response);
+      setStatus('success');
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'Unable to retrieve network health metrics.';
+      setError(message);
+      setStatus('error');
+    } finally {
+      setIsRefreshing(false);
+    }
   }, []);
 
-  const { metrics, totals} = useMemo(() => computeDistribution(evidence), [evidence]);
+  useEffect(() => {
+    fetchHealth();
+    const interval = setInterval(() => fetchHealth(true), 60000);
+    return () => clearInterval(interval);
+  }, [fetchHealth]);
 
-  const activeLocations = metrics.filter((metric) => metric.shards > 0.35);
-  const regionsCovered = new Set(activeLocations.map((metric) => metric.region)).size;
-  const topLocations = [...metrics]
-    .sort((a, b) => b.shards - a.shards)
-    .slice(0, 4);
+  const { metrics, unmapped } = useMemo(() => buildLocationMetrics(health?.nodes ?? []), [health?.nodes]);
+
+  const totals = useMemo(
+    () => computeTotals(health?.stats, health?.latency, metrics),
+    [health?.latency, health?.stats, metrics],
+  );
+
+  const topLocations = useMemo(() => {
+    return [...metrics]
+      .filter((metric) => metric.shards > 0)
+      .sort((a, b) => b.shards - a.shards)
+      .slice(0, 4);
+  }, [metrics]);
+
+  const mapStatusLabel = health?.healthy === false ? 'Degraded mesh' : 'Mesh operational';
+  const lastUpdatedLabel = health?.updatedAt ? formatTimestamp(health.updatedAt) : 'Awaiting first sync';
+  const refreshDisabled = status === 'loading' || isRefreshing;
 
   return (
     <div className="space-y-10">
       <div className="space-y-2">
         <h1 className="text-3xl font-semibold tracking-tight text-neutral-50">Global chunk map</h1>
+        <p className="text-sm text-neutral-500">{mapStatusLabel} · Last updated {lastUpdatedLabel}</p>
+        {unmapped > 0 && (
+          <p className="text-xs text-amber-400/80">{unmapped} node{unmapped === 1 ? '' : 's'} missing coordinates were excluded from the map.</p>
+        )}
       </div>
+
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={() => fetchHealth(status === 'success')}
+          disabled={refreshDisabled}
+          className="inline-flex items-center gap-2 rounded-xl border border-neutral-800 bg-neutral-900/70 px-4 py-2 text-sm font-semibold text-neutral-200 transition hover:bg-neutral-900 disabled:cursor-not-allowed disabled:opacity-60"
+        >
+          {refreshDisabled ? <Loader2 className="h-4 w-4 animate-spin" /> : <RefreshCw className="h-4 w-4" />}
+          {refreshDisabled ? 'Refreshing…' : 'Refresh data'}
+        </button>
+        {status === 'error' && error && (
+          <div className="flex items-center gap-2 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-xs text-amber-100">
+            <AlertTriangle className="h-4 w-4" />
+            {error}
+          </div>
+        )}
+      </div>
+
+      {status === 'loading' && !health && (
+        <div className="flex items-center gap-3 rounded-2xl border border-neutral-800/60 bg-neutral-950/60 p-6 text-sm text-neutral-400">
+          <Loader2 className="h-5 w-5 animate-spin text-neutral-200" />
+          Fetching live replication telemetry…
+        </div>
+      )}
 
       <div className="grid gap-4 md:grid-cols-4">
         <StatCard
           icon={<Layers className="h-5 w-5" />}
           label="Shards in circulation"
-          value={Math.round(totals.totalShards || 0).toLocaleString()}
+          value={formatStat(totals.totalShards, { precision: 0 })}
           sublabel="Total encrypted partitions"
         />
         <StatCard
           icon={<Globe2 className="h-5 w-5" />}
           label="Active jurisdictions"
-          value={regionsCovered === 0 ? '—' : regionsCovered.toString()}
-          sublabel="Distinct geopolitical zones"
+          value={totals.jurisdictions > 0 ? totals.jurisdictions.toString() : '—'}
+          sublabel="Distinct zones"
         />
         <StatCard
           icon={<Zap className="h-5 w-5" />}
@@ -196,7 +361,7 @@ export default function GlobalMapPage() {
         <StatCard
           icon={<CloudLightning className="h-5 w-5" />}
           label="Distributed payload"
-          value={`${totals.totalDataVolume <= 0 ? '—' : totals.totalDataVolume.toFixed(1)} MB`}
+          value={totals.totalDataVolume > 0 ? `${totals.totalDataVolume.toFixed(1)} MB` : '—'}
           sublabel="Aggregate encrypted storage"
         />
       </div>
@@ -291,13 +456,13 @@ export default function GlobalMapPage() {
                   <div className="h-1.5 w-full overflow-hidden rounded-full bg-neutral-800/80">
                     <div
                       className="h-full rounded-full bg-gradient-to-r from-emerald-400 to-sky-400"
-                      style={{ width: `${Math.min(100, (metric.shards / (totals.totalShards || 1)) * 100)}%` }}
+                      style={{ width: `${totals.totalShards > 0 ? Math.min(100, (metric.shards / totals.totalShards) * 100) : 0}%` }}
                     />
                   </div>
                 </div>
               ))}
               {topLocations.length === 0 && (
-                <p className="text-sm text-neutral-500">Upload evidence to seed the shard perimeter.</p>
+                <p className="text-sm text-neutral-500">Waiting for ledger nodes to report shard telemetry.</p>
               )}
             </div>
           </div>
@@ -320,4 +485,29 @@ function StatCard({ icon, label, value, sublabel }: { icon: React.ReactNode; lab
       <p className="text-xs text-neutral-500">{sublabel}</p>
     </div>
   );
+}
+
+function formatStat(value: number, options?: { precision?: number }): string {
+  if (!isFiniteNumber(value) || value <= 0) return '—';
+  const precision = options?.precision ?? 0;
+  if (precision === 0) {
+    return Math.round(value).toLocaleString();
+  }
+  return value.toFixed(precision);
+}
+
+function formatTimestamp(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) {
+    return value;
+  }
+
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(date);
+  } catch {
+    return date.toISOString();
+  }
 }

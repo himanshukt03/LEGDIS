@@ -1,319 +1,358 @@
-import { useEffect, useMemo, useState } from 'react';
-import { Calendar, Database, Download, FileText, Loader2, Search, ShieldCheck } from 'lucide-react';
-import { storage } from '../lib/storage';
-import { downloadEvidenceRecord } from '../lib/download';
-import type { EvidenceRecord } from '../types';
+import { FormEvent, useCallback, useMemo, useState } from 'react';
+import {
+  Clipboard,
+  ClipboardCheck,
+  ClipboardX,
+  FileSearch,
+  Loader2,
+  ShieldCheck,
+  XCircle,
+} from 'lucide-react';
+import { apiRequest, ApiError } from '../lib/api';
 
-type ChunkIntegrity = 'verified' | 'rebuilding';
+type PageStatus = 'idle' | 'loading' | 'success' | 'error';
 
-interface ChunkDetail {
-  id: string;
-  sizeKb: number;
-  replicas: number;
-  hashFragment: string;
-  latencyMs: number;
-  integrity: ChunkIntegrity;
+interface ChunkInfo {
+  index: number;
+  cid: string;
+  size: number;
 }
 
-const MIN_CHUNKS = 3;
-const MAX_CHUNKS = 12;
-
-function hashSeed(seed: string): number {
-  let hash = 0;
-  for (let index = 0; index < seed.length; index += 1) {
-    hash = (hash * 31 + seed.charCodeAt(index)) >>> 0;
-  }
-  return hash;
+interface EncryptionInfo {
+  key: string;
+  iv: string;
 }
 
-function seededNumber(seed: string, range: number): number {
-  if (range <= 0) return 0;
-  return hashSeed(seed) % range;
+interface IntegrityMetadata {
+  originalName: string;
+  hash: string;
+  chunksStored: number;
+  chunkList: ChunkInfo[];
+  encryption?: EncryptionInfo | null;
+  timestamp: string;
 }
 
-function generateChunkDetails(record: EvidenceRecord): ChunkDetail[] {
-  const virtualSize = record.fileSize || record.fileName.length * 2048;
-  const chunkEstimate = Math.ceil(virtualSize / (256 * 1024));
-  const chunkCount = Math.min(MAX_CHUNKS, Math.max(MIN_CHUNKS, chunkEstimate));
-  const averageChunkSize = Math.max(64, Math.round((virtualSize / chunkCount) / 1024));
-
-  return Array.from({ length: chunkCount }, (_, index) => {
-    const jitter = seededNumber(`${record.id}-size-${index}`, 41) - 20;
-    const replicas = 2 + (seededNumber(`${record.id}-replicas-${index}`, 3));
-    const latency = 45 + seededNumber(`${record.id}-latency-${index}`, 90);
-    const integrityRoll = seededNumber(`${record.id}-integrity-${index}`, 100);
-    const integrity: ChunkIntegrity = integrityRoll > 8 ? 'verified' : 'rebuilding';
-    const hashFragment = Math.abs(hashSeed(`${record.blockId}-${record.caseId}-${index}`))
-      .toString(16)
-      .padStart(8, '0')
-      .slice(0, 8);
-
-    return {
-      id: `${record.id}-chunk-${index + 1}`,
-      sizeKb: Math.max(32, averageChunkSize + jitter),
-      replicas,
-      latencyMs: latency,
-      hashFragment,
-      integrity,
-    };
-  });
+interface IntegrityResponse {
+  file_decrypted: boolean;
+  hash_verified: boolean;
+  metadata: IntegrityMetadata | null;
+  tempkey: string;
 }
+
+type CopyState = 'idle' | 'copied' | 'failed';
 
 export default function FileValidityPage() {
   const [searchQuery, setSearchQuery] = useState('');
-  const [evidence, setEvidence] = useState<EvidenceRecord[]>([]);
-  const [selectedRecordId, setSelectedRecordId] = useState<string | null>(null);
-  const [downloadingId, setDownloadingId] = useState<string | null>(null);
+  const [status, setStatus] = useState<PageStatus>('idle');
+  const [result, setResult] = useState<IntegrityResponse | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [copyState, setCopyState] = useState<CopyState>('idle');
 
-  useEffect(() => {
-    setEvidence(storage.getEvidence());
-  }, []);
+  const metadata = result?.metadata ?? null;
+  const chunkList = metadata?.chunkList ?? [];
+  const chunkCount = metadata?.chunksStored ?? chunkList.length;
 
-  const filteredEvidence = useMemo(() => {
-    if (!searchQuery.trim()) return evidence;
-    const needle = searchQuery.toLowerCase();
-    return evidence.filter((record) =>
-      [record.caseId, record.fileName, record.description].some((field) =>
-        field.toLowerCase().includes(needle)
-      )
-    );
-  }, [searchQuery, evidence]);
+  const totalBytes = useMemo(() => {
+    if (!metadata) return 0;
+    return metadata.chunkList.reduce((sum, chunk) => sum + (Number(chunk.size) || 0), 0);
+  }, [metadata]);
 
-  useEffect(() => {
-    if (filteredEvidence.length === 0) {
-      setSelectedRecordId(null);
+  const formattedTotalSize = useMemo(() => formatBytes(totalBytes), [totalBytes]);
+
+  const integritySummary = useMemo(
+    () => ({
+      decrypted: result?.file_decrypted ?? false,
+      hashVerified: result?.hash_verified ?? false,
+    }),
+    [result]
+  );
+
+  const handleSubmit = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    const trimmedQuery = searchQuery.trim();
+
+    if (!trimmedQuery) {
+      setError('Please enter a file ID to verify.');
+      setStatus('error');
+      setResult(null);
       return;
     }
 
-    const alreadySelected = filteredEvidence.some((record) => record.id === selectedRecordId);
-    if (!alreadySelected) {
-      setSelectedRecordId(filteredEvidence[0].id);
-    }
-  }, [filteredEvidence, selectedRecordId]);
+    setStatus('loading');
+    setError(null);
+    setCopyState('idle');
 
-  const selectedRecord = useMemo(() => {
-    return filteredEvidence.find((record) => record.id === selectedRecordId) ?? null;
-  }, [filteredEvidence, selectedRecordId]);
-
-  const chunkDetails = useMemo(() => {
-    if (!selectedRecord) return [] as ChunkDetail[];
-    return generateChunkDetails(selectedRecord);
-  }, [selectedRecord]);
-
-  const handleDownload = (record: EvidenceRecord) => {
-    setDownloadingId(record.id);
     try {
-      downloadEvidenceRecord(record);
-    } catch (error) {
-      console.error('Failed to download evidence record', error);
-    } finally {
-      setTimeout(() => {
-        setDownloadingId((current) => (current === record.id ? null : current));
-      }, 400);
+      const response = await apiRequest<IntegrityResponse>(
+        `/getfile?fileID=${encodeURIComponent(trimmedQuery)}`
+      );
+      setResult(response);
+      setStatus('success');
+    } catch (err) {
+      const message = err instanceof ApiError ? err.message : 'Unable to verify file integrity.';
+      setError(message);
+      setResult(null);
+      setStatus('error');
     }
   };
+
+  const handleCopyTempkey = useCallback(async () => {
+    if (!result?.tempkey) {
+      setCopyState('failed');
+      setTimeout(() => setCopyState('idle'), 2000);
+      return;
+    }
+
+    try {
+      await navigator.clipboard.writeText(result.tempkey);
+      setCopyState('copied');
+      setTimeout(() => setCopyState('idle'), 2000);
+    } catch {
+      setCopyState('failed');
+      setTimeout(() => setCopyState('idle'), 2000);
+    }
+  }, [result?.tempkey]);
+
+  const badgeLabel = integritySummary.decrypted && integritySummary.hashVerified
+    ? 'Integrity verified'
+    : 'Manual review recommended';
+
+  const badgeTone = integritySummary.decrypted && integritySummary.hashVerified ? 'success' : 'warn';
 
   return (
     <div className="space-y-10">
       <div className="space-y-2">
-        <h1 className="text-3xl font-semibold tracking-tight text-neutral-50">File Validity</h1>
+        <h1 className="text-3xl font-semibold tracking-tight text-neutral-50">File Integrity</h1>
         <p className="text-sm text-neutral-500">
-          Inspect notarised artefacts, verify distributed shards, and confirm integrity across the ledger.
+          Search the ledger for notarised files, inspect shard distribution, and confirm end-to-end integrity.
         </p>
       </div>
 
       <div className="rounded-2xl border border-neutral-800/60 bg-neutral-950/60 p-6">
-        <div className="relative">
-          <Search className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-neutral-500" />
-          <input
-            value={searchQuery}
-            onChange={(event) => setSearchQuery(event.target.value)}
-            placeholder="Search by case, filename, description…"
-            className="w-full rounded-xl border border-neutral-800 bg-neutral-900/60 py-4 pl-14 pr-4 text-base text-neutral-50 placeholder-neutral-500 focus:border-neutral-600 focus:outline-none focus:ring-2 focus:ring-neutral-700"
-          />
-        </div>
-        {searchQuery && (
-          <p className="mt-3 text-sm text-neutral-500">
-            Found {filteredEvidence.length} result{filteredEvidence.length === 1 ? '' : 's'} for “{searchQuery}”.
-          </p>
-        )}
+        <form className="space-y-4" onSubmit={handleSubmit}>
+          <div className="flex flex-col gap-3 md:flex-row md:items-center">
+            <div className="relative flex-1">
+              <FileSearch className="pointer-events-none absolute left-5 top-1/2 h-5 w-5 -translate-y-1/2 text-neutral-500" />
+              <input
+                value={searchQuery}
+                onChange={(event) => setSearchQuery(event.target.value)}
+                placeholder="Enter the file ID generated at upload"
+                autoComplete="off"
+                className="w-full rounded-xl border border-neutral-800 bg-neutral-900/60 py-4 pl-14 pr-4 text-base text-neutral-50 placeholder-neutral-500 focus:border-neutral-600 focus:outline-none focus:ring-2 focus:ring-neutral-700"
+              />
+            </div>
+            <button
+              type="submit"
+              disabled={status === 'loading'}
+              className="inline-flex items-center justify-center gap-2 rounded-xl bg-emerald-500 px-6 py-3 text-sm font-semibold text-emerald-950 transition disabled:cursor-not-allowed disabled:opacity-60 hover:bg-emerald-400"
+            >
+              {status === 'loading' ? <Loader2 className="h-4 w-4 animate-spin" /> : <ShieldCheck className="h-4 w-4" />}
+              {status === 'loading' ? 'Verifying…' : 'Verify integrity'}
+            </button>
+          </div>
+        </form>
       </div>
 
-      {filteredEvidence.length === 0 ? (
-        <div className="rounded-2xl border border-neutral-800/60 bg-neutral-950/60 p-12 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full border border-neutral-800/70 bg-neutral-900/60">
-            <Database className="h-7 w-7 text-neutral-400" />
-          </div>
-          <p className="mt-6 text-lg font-medium text-neutral-200">
-            {evidence.length === 0 ? 'No evidence records available yet' : 'No records matched this filter'}
-          </p>
-          <p className="mt-2 text-sm text-neutral-500">
-            {evidence.length === 0
-              ? 'Once your team uploads artefacts, they will be indexed here momentarily.'
-              : 'Adjust your query or clear the filter to view the full ledger.'}
-          </p>
+      {status === 'idle' && !result && !error && (
+        <div className="rounded-2xl border border-dashed border-neutral-800/60 bg-neutral-950/40 p-10 text-center text-sm text-neutral-500">
+          Provide a file ID to begin.
         </div>
-      ) : (
-        <div className="overflow-hidden rounded-2xl border border-neutral-800/60 bg-neutral-950/60">
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm text-neutral-300">
-              <thead className="bg-neutral-900/70 text-xs uppercase tracking-[0.3em] text-neutral-500">
-                <tr>
-                  <th className="px-6 py-4 text-left">Case</th>
-                  <th className="px-6 py-4 text-left">File name</th>
-                  <th className="px-6 py-4 text-left">Synopsis</th>
-                  <th className="px-6 py-4 text-left">Timestamp</th>
-                  <th className="px-6 py-4 text-left">Block</th>
-                  <th className="px-6 py-4 text-left">Integrity</th>
-                  <th className="px-6 py-4 text-left">Download</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-neutral-900/60">
-                {filteredEvidence.map((record) => {
-                  const isActive = record.id === selectedRecordId;
-                  const chunks = generateChunkDetails(record);
-                  return (
-                    <tr
-                      key={record.id}
-                      className={`cursor-pointer transition hover:bg-neutral-900/40 ${isActive ? 'bg-neutral-900/50' : ''}`}
-                      onClick={() => setSelectedRecordId(record.id)}
-                    >
-                      <td className="px-6 py-4 text-neutral-100">
-                        <span className="inline-flex items-center gap-2">
-                          <FileText className="h-4 w-4 text-neutral-300" />
-                          {record.caseId}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="font-medium text-neutral-200">{record.fileName}</div>
-                        <div className="text-xs text-neutral-500">{(record.fileSize / 1024).toFixed(1)} KB</div>
-                      </td>
-                      <td className="px-6 py-4 text-neutral-400">{record.description}</td>
-                      <td className="px-6 py-4">
-                        <div className="flex items-center gap-2 text-neutral-400">
-                          <Calendar className="h-4 w-4" />
-                          {new Date(record.createdAt).toLocaleDateString()}
-                        </div>
-                        <div className="mt-1 text-xs text-neutral-600">{new Date(record.createdAt).toLocaleTimeString()}</div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <span className="inline-flex items-center rounded-full border border-neutral-700 bg-neutral-900/70 px-3 py-1 text-xs font-semibold text-neutral-200">
-                          #{record.blockId.split('-')[1] ?? record.blockId}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4">
-                        <div className="inline-flex flex-wrap gap-1">
-                          {chunks.slice(0, 6).map((chunk) => (
-                            <span
-                              key={chunk.id}
-                              className={`inline-flex items-center rounded-full px-2 py-1 text-[10px] font-semibold ${
-                                chunk.integrity === 'verified'
-                                  ? 'border border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
-                                  : 'border border-amber-500/40 bg-amber-500/10 text-amber-200'
-                              }`}
-                            >
-                              C{chunk.id.split('-').pop()}
-                            </span>
-                          ))}
-                          {chunks.length > 6 && (
-                            <span className="inline-flex items-center rounded-full border border-neutral-700 bg-neutral-900/70 px-2 py-1 text-[10px] text-neutral-400">
-                              +{chunks.length - 6}
-                            </span>
-                          )}
-                        </div>
-                      </td>
-                      <td className="px-6 py-4">
-                        <button
-                          type="button"
-                          onClick={() => handleDownload(record)}
-                          disabled={downloadingId === record.id}
-                          className="btn-secondary inline-flex items-center gap-2 text-xs font-medium disabled:cursor-not-allowed disabled:opacity-60"
-                        >
-                          {downloadingId === record.id ? (
-                            <Loader2 className="h-4 w-4 animate-spin" />
-                          ) : (
-                            <Download className="h-4 w-4" />
-                          )}
-                          {downloadingId === record.id ? 'Preparing…' : 'Download'}
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+      )}
+
+      {status === 'error' && error && (
+        <div className="flex items-start gap-3 rounded-2xl border border-rose-500/30 bg-rose-950/30 p-5 text-sm text-rose-100">
+          <XCircle className="mt-0.5 h-5 w-5 text-rose-300" />
+          <div>
+            <p className="font-semibold text-rose-100">Verification failed</p>
+            <p className="mt-1 text-rose-200/80">{error}</p>
           </div>
         </div>
       )}
 
-      {selectedRecord && (
-        <div className="space-y-6 rounded-2xl border border-neutral-800/60 bg-neutral-950/60 p-6">
-          <div className="flex items-center justify-between">
-            <div>
-              <h2 className="text-xl font-semibold text-neutral-100">Shard breakdown</h2>
-              <p className="text-sm text-neutral-500">
-                {selectedRecord.fileName} · {chunkDetails.length} chunks · {(selectedRecord.fileSize / 1024).toFixed(1)} KB total payload
-              </p>
-            </div>
-            <div className="inline-flex items-center gap-2 rounded-full border border-neutral-700 bg-neutral-900/70 px-3 py-1 text-xs text-neutral-400">
-              <ShieldCheck className="h-4 w-4 text-emerald-300" />
-              Ledger integrity assured
-            </div>
-          </div>
+      {status === 'loading' && (
+        <div className="flex items-center gap-3 rounded-2xl border border-neutral-800/60 bg-neutral-950/60 p-6 text-sm text-neutral-400">
+          <Loader2 className="h-5 w-5 animate-spin text-neutral-300" />
+          Verifying integrity details. This may take a moment if the file spans multiple shards.
+        </div>
+      )}
 
-          <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-            {chunkDetails.map((chunk, index) => (
-              <div
-                key={chunk.id}
-                className="space-y-3 rounded-xl border border-neutral-800/70 bg-neutral-900/60 p-4"
-              >
-                <div className="flex items-center justify-between text-sm text-neutral-300">
-                  <span className="font-semibold">Chunk {index + 1}</span>
-                  <span
-                    className={`inline-flex items-center rounded-full px-2 py-1 text-[10px] font-semibold ${
-                      chunk.integrity === 'verified'
-                        ? 'border border-emerald-500/40 bg-emerald-500/10 text-emerald-300'
-                        : 'border border-amber-500/40 bg-amber-500/10 text-amber-200'
-                    }`}
-                  >
-                    {chunk.integrity === 'verified' ? 'Verified' : 'Rebuilding'}
-                  </span>
-                </div>
-                <div className="space-y-2 text-xs text-neutral-400">
-                  <div className="flex items-center justify-between">
-                    <span>Size</span>
-                    <span className="font-mono text-neutral-300">{chunk.sizeKb} KB</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Replicas</span>
-                    <span className="font-mono text-neutral-300">{chunk.replicas}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Hash</span>
-                    <span className="font-mono text-neutral-500">{chunk.hashFragment}</span>
-                  </div>
-                  <div className="flex items-center justify-between">
-                    <span>Latency</span>
-                    <span className="font-mono text-neutral-300">{chunk.latencyMs} ms</span>
-                  </div>
-                </div>
+      {status === 'success' && result && metadata && (
+        <div className="space-y-8">
+          <div className="space-y-6 rounded-2xl border border-neutral-800/60 bg-neutral-950/60 p-6">
+            <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
+              <div className="space-y-2">
+                <h2 className="text-xl font-semibold text-neutral-100">Verification summary</h2>
+                <p className="text-sm text-neutral-400">
+                  {metadata.originalName} · {chunkCount} shard{chunkCount === 1 ? '' : 's'} · {formattedTotalSize}
+                </p>
               </div>
-            ))}
+              <div
+                className={`inline-flex items-center gap-2 self-start rounded-full px-3 py-1 text-xs font-medium ${
+                  badgeTone === 'success'
+                    ? 'border border-emerald-500/40 bg-emerald-500/10 text-emerald-200'
+                    : 'border border-amber-500/40 bg-amber-500/10 text-amber-200'
+                }`}
+              >
+                <ShieldCheck className="h-4 w-4" />
+                {badgeLabel}
+              </div>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <Detail label="Original filename" value={metadata.originalName} />
+              <Detail label="Hash" value={metadata.hash} mono />
+              <Detail label="Chunks stored" value={chunkCount.toString()} />
+              <Detail label="Ledger timestamp" value={formatTimestamp(metadata.timestamp)} />
+              <Detail label="Aggregate size" value={formattedTotalSize} />
+              <Detail
+                label="Hash verification"
+                value={integritySummary.hashVerified ? 'Verified against ledger' : 'Mismatch detected'}
+                tone={integritySummary.hashVerified ? 'success' : 'warn'}
+              />
+            </div>
+
+            {metadata.encryption && (
+              <div className="grid gap-4 rounded-xl border border-neutral-800/60 bg-neutral-900/50 p-4 sm:grid-cols-2">
+                <Detail label="Encryption key" value={metadata.encryption.key} mono />
+                <Detail label="Initialization vector" value={metadata.encryption.iv} mono />
+              </div>
+            )}
+          </div>
+
+          <div className="rounded-2xl border border-neutral-800/60 bg-neutral-950/60 p-6">
+            <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-neutral-100">Temporary download key</h3>
+                <p className="mt-1 text-sm text-neutral-400">
+                  Use this key to download the reconstructed artefact. Keys expire shortly after issuance.
+                </p>
+                <p className="mt-4 break-all font-mono text-sm text-neutral-200">
+                  {result.tempkey || 'No download key returned.'}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyTempkey}
+                disabled={!result.tempkey}
+                className="inline-flex items-center gap-2 self-start rounded-lg border border-neutral-700 bg-neutral-900/60 px-4 py-2 text-xs font-semibold text-neutral-200 transition hover:bg-neutral-900 disabled:cursor-not-allowed disabled:opacity-60"
+              >
+                {copyState === 'copied' ? (
+                  <ClipboardCheck className="h-4 w-4" />
+                ) : copyState === 'failed' ? (
+                  <ClipboardX className="h-4 w-4" />
+                ) : (
+                  <Clipboard className="h-4 w-4" />
+                )}
+                {copyState === 'copied'
+                  ? 'Copied'
+                  : copyState === 'failed'
+                  ? 'Copy failed'
+                  : 'Copy tempkey'}
+              </button>
+            </div>
+          </div>
+
+          <div className="space-y-4 rounded-2xl border border-neutral-800/60 bg-neutral-950/60 p-6">
+            <div className="flex flex-col gap-2 md:flex-row md:items-center md:justify-between">
+              <div>
+                <h3 className="text-lg font-semibold text-neutral-100">Shard breakdown</h3>
+                <p className="text-sm text-neutral-400">Detailed view of every stored chunk and its CID.</p>
+              </div>
+              <span className="text-xs text-neutral-500">
+                {chunkList.length} shard{chunkList.length === 1 ? '' : 's'} indexed · {formattedTotalSize}
+              </span>
+            </div>
+
+            {chunkList.length === 0 ? (
+              <p className="rounded-xl border border-neutral-800/60 bg-neutral-900/50 p-4 text-sm text-neutral-400">
+                No shard metadata was returned for this file.
+              </p>
+            ) : (
+              <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
+                {chunkList.map((chunk) => (
+                  <div key={`${chunk.index}-${chunk.cid}`} className="space-y-3 rounded-xl border border-neutral-800/70 bg-neutral-900/60 p-4">
+                    <div className="flex items-center justify-between text-sm text-neutral-200">
+                      <span className="font-semibold">Chunk {chunk.index + 1}</span>
+                      <span className="rounded-full border border-neutral-700 bg-neutral-900/70 px-2 py-0.5 text-[10px] text-neutral-400">
+                        CID
+                      </span>
+                    </div>
+                    <div className="space-y-2 text-xs text-neutral-400">
+                      <div className="flex items-center justify-between">
+                        <span>Size</span>
+                        <span className="font-mono text-neutral-200">{formatBytes(Number(chunk.size) || 0)}</span>
+                      </div>
+                      <div>
+                        <span className="text-neutral-400">Content identifier</span>
+                        <p className="mt-1 break-all font-mono text-[11px] text-neutral-500">{chunk.cid}</p>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </div>
         </div>
       )}
 
-      {filteredEvidence.length > 0 && (
-        <div className="flex flex-wrap items-center justify-between gap-4 text-sm text-neutral-500">
-          <span>
-            Displaying {filteredEvidence.length} of {evidence.length} notarised entries
-          </span>
-          <span className="inline-flex items-center gap-2">
-            <Database className="h-4 w-4" />
-            Stored immutably on distributed ledger
-          </span>
+      {status === 'success' && result && !metadata && (
+        <div className="rounded-2xl border border-amber-500/30 bg-amber-950/20 p-6 text-sm text-amber-100">
+          The ledger responded successfully but no metadata was included for this file. Check the backend service logs.
         </div>
       )}
+    </div>
+  );
+}
+
+function formatBytes(bytes: number): string {
+  if (!Number.isFinite(bytes) || bytes <= 0) {
+    return '0 B';
+  }
+  const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+  const exponent = Math.min(Math.floor(Math.log(bytes) / Math.log(1024)), units.length - 1);
+  const value = bytes / Math.pow(1024, exponent);
+  const precision = value >= 10 || exponent === 0 ? 0 : 1;
+  return `${value.toFixed(precision)} ${units[exponent]}`;
+}
+
+function formatTimestamp(isoString: string): string {
+  if (!isoString) return 'Unknown';
+  const date = new Date(isoString);
+  if (Number.isNaN(date.getTime())) {
+    return isoString;
+  }
+
+  try {
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(date);
+  } catch {
+    return date.toISOString();
+  }
+}
+
+interface DetailProps {
+  label: string;
+  value: string | number;
+  mono?: boolean;
+  tone?: 'default' | 'success' | 'warn';
+}
+
+function Detail({ label, value, mono, tone = 'default' }: DetailProps) {
+  const toneClass =
+    tone === 'success'
+      ? 'text-emerald-300'
+      : tone === 'warn'
+      ? 'text-amber-300'
+      : 'text-neutral-200';
+
+  return (
+    <div className="space-y-1 rounded-xl border border-neutral-800/60 bg-neutral-900/50 p-4">
+      <p className="text-xs uppercase tracking-[0.2em] text-neutral-500">{label}</p>
+      <p className={`text-sm font-semibold ${toneClass} ${mono ? 'break-all font-mono text-xs' : ''}`}>
+        {value}
+      </p>
     </div>
   );
 }

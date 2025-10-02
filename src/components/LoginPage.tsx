@@ -11,41 +11,66 @@ interface LoginPageProps {
 }
 
 export default function LoginPage({ onLogin, onBack }: LoginPageProps) {
+  const DEMO_CREDENTIALS = {
+    nodeId: 'NODE001',
+    username: 'demo-agent',
+    password: 'demo-password',
+    token:
+      'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6InBnczIiLCJpYXQiOjE3NTkzNDY0NTMsImV4cCI6MTc1OTM1MzY1M30.jUnA6ZNTutY2CQKxypZfVJuKgeaVmtoClJy0nkbqQDY',
+    message: 'User demo-agent has logged in',
+  } as const;
+
   const [nodeId, setNodeId] = useState('');
-  const [key, setKey] = useState('');
-  const [showKey, setShowKey] = useState(false);
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+  const [successMessage, setSuccessMessage] = useState('');
 
-  const handleSubmit = (event: React.FormEvent) => {
+  const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setError('');
+    setSuccessMessage('');
 
-    if (!nodeId || !key) {
-      setError('Please enter both a node identifier and key.');
+    if (!nodeId || !username || !password) {
+      setError('Please provide node ID, username, and password.');
       return;
     }
 
     setIsLoading(true);
+    try {
+      const matchesDemoCredentials =
+        nodeId.trim().toLowerCase() === DEMO_CREDENTIALS.nodeId.toLowerCase() &&
+        username.trim().toLowerCase() === DEMO_CREDENTIALS.username.toLowerCase() &&
+        password === DEMO_CREDENTIALS.password;
 
-    setTimeout(() => {
-      if (nodeId === 'NODE001' && key === 'SECURE_KEY_123') {
-        const node: Node = {
-          id: 'node-1',
-          nodeId,
-          name: 'Law Enforcement Agency',
-          isActive: true,
-          createdAt: new Date().toISOString(),
-          lastLogin: new Date().toISOString(),
-        };
-
-        storage.setCurrentNode(node);
-        onLogin(node);
-      } else {
-        setError('The credentials provided are invalid.');
-        setIsLoading(false);
+      if (!matchesDemoCredentials) {
+        throw new Error('Invalid credentials. Please use the provided demo account.');
       }
-    }, 600);
+
+      storage.setAuthToken(DEMO_CREDENTIALS.token);
+
+      const node: Node = {
+        id: nodeId,
+        nodeId,
+        name: username,
+        isActive: true,
+        createdAt: new Date().toISOString(),
+        lastLogin: new Date().toISOString(),
+      };
+
+      setSuccessMessage(DEMO_CREDENTIALS.message);
+      onLogin(node);
+    } catch (requestError) {
+      const message =
+        requestError instanceof Error
+          ? requestError.message
+          : 'Unexpected error when contacting the authentication service.';
+      setError(message);
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
@@ -87,24 +112,37 @@ export default function LoginPage({ onLogin, onBack }: LoginPageProps) {
             </div>
 
             <div className="space-y-2">
-              <label htmlFor="nodeKey" className="text-sm font-medium text-neutral-200">Hardware key</label>
+              <label htmlFor="username" className="text-sm font-medium text-neutral-200">Username</label>
+              <input
+                id="username"
+                type="text"
+                value={username}
+                onChange={(event) => setUsername(event.target.value)}
+                className="w-full rounded-xl border border-neutral-800 bg-neutral-900/60 px-4 py-3 text-neutral-50 placeholder-neutral-500 focus:border-neutral-600 focus:outline-none focus:ring-2 focus:ring-neutral-700"
+                placeholder="Enter assigned username"
+                disabled={isLoading}
+              />
+            </div>
+
+            <div className="space-y-2">
+              <label htmlFor="password" className="text-sm font-medium text-neutral-200">Password</label>
               <div className="relative">
                 <input
-                  id="nodeKey"
-                  type={showKey ? 'text' : 'password'}
-                  value={key}
-                  onChange={(event) => setKey(event.target.value)}
+                  id="password"
+                  type={showPassword ? 'text' : 'password'}
+                  value={password}
+                  onChange={(event) => setPassword(event.target.value)}
                   className="w-full rounded-xl border border-neutral-800 bg-neutral-900/60 px-4 py-3 pr-12 text-neutral-50 placeholder-neutral-500 focus:border-neutral-600 focus:outline-none focus:ring-2 focus:ring-neutral-700"
-                  placeholder="Enter secure key"
+                  placeholder="Enter password"
                   disabled={isLoading}
                 />
                 <button
                   type="button"
-                  onClick={() => setShowKey((value) => !value)}
+                  onClick={() => setShowPassword((value) => !value)}
                   className="absolute right-3 top-1/2 -translate-y-1/2 text-neutral-500 transition hover:text-neutral-100"
-                  aria-label={showKey ? 'Hide key' : 'Show key'}
+                  aria-label={showPassword ? 'Hide password' : 'Show password'}
                 >
-                  {showKey ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
+                  {showPassword ? <EyeOff className="h-5 w-5" /> : <Eye className="h-5 w-5" />}
                 </button>
               </div>
             </div>
@@ -113,6 +151,13 @@ export default function LoginPage({ onLogin, onBack }: LoginPageProps) {
               <div className="flex items-start gap-2 rounded-xl border border-red-500/30 bg-red-500/10 px-4 py-3 text-sm text-red-300">
                 <span className="mt-1 block h-2 w-2 rounded-full bg-red-400" />
                 {error}
+              </div>
+            )}
+
+            {successMessage && (
+              <div className="flex items-start gap-2 rounded-xl border border-emerald-500/30 bg-emerald-500/10 px-4 py-3 text-sm text-emerald-300">
+                <span className="mt-1 block h-2 w-2 rounded-full bg-emerald-400" />
+                {successMessage}
               </div>
             )}
 
@@ -126,7 +171,7 @@ export default function LoginPage({ onLogin, onBack }: LoginPageProps) {
           </form>
 
           <div className="mt-8 rounded-xl border border-neutral-800/60 bg-neutral-900/50 px-4 py-3 text-center text-xs text-neutral-500">
-            Demo credentials: <span className="font-mono text-neutral-300">NODE001 / SECURE_KEY_123</span>
+            Demo credentials: <span className="font-mono text-neutral-300">NODE001 / demo-agent / demo-password</span>
           </div>
         </div>
       </div>

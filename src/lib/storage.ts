@@ -4,6 +4,7 @@ const STORAGE_KEYS = {
   CURRENT_NODE: 'ledgis_current_node',
   BLOCKS: 'ledgis_blocks',
   EVIDENCE: 'ledgis_evidence',
+  AUTH_TOKEN: 'ledgis_auth_token',
 } as const;
 
 export const storage = {
@@ -63,9 +64,22 @@ export const storage = {
     storage.setEvidence(evidence);
   },
 
+  setAuthToken: (token: string | null) => {
+    if (token) {
+      localStorage.setItem(STORAGE_KEYS.AUTH_TOKEN, token);
+    } else {
+      localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
+    }
+  },
+
+  getAuthToken: (): string | null => {
+    return localStorage.getItem(STORAGE_KEYS.AUTH_TOKEN);
+  },
+
   clearAll: () => {
     localStorage.removeItem(STORAGE_KEYS.CURRENT_NODE);
     localStorage.removeItem(STORAGE_KEYS.BLOCKS);
     localStorage.removeItem(STORAGE_KEYS.EVIDENCE);
+    localStorage.removeItem(STORAGE_KEYS.AUTH_TOKEN);
   },
 };

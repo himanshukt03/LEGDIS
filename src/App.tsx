@@ -1,4 +1,5 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
+import { Navigate, Route, Routes, useNavigate } from 'react-router-dom';
 import LandingPage from './components/LandingPage';
 import LoginPage from './components/LoginPage';
 import UploadPage from './components/UploadPage';
@@ -7,74 +8,64 @@ import DownloadPage from './components/DownloadPage';
 import VisualizerPage from './components/VisualizerPage';
 import GlobalMapPage from './components/GlobalMapPage';
 import Layout from './components/Layout';
-import { Node, PageType } from './types';
+import { Node } from './types';
 import { storage } from './lib/storage';
 
-type AppView = 'landing' | 'login' | 'app';
-
 function App() {
-  const [currentView, setCurrentView] = useState<AppView>('landing');
-  const [currentNode, setCurrentNode] = useState<Node | null>(null);
-  const [currentPage, setCurrentPage] = useState<PageType>('upload');
-
-  useEffect(() => {
+  const [currentNode, setCurrentNode] = useState<Node | null>(() => {
     const savedNode = storage.getCurrentNode();
-    if (savedNode) {
-      setCurrentNode(savedNode);
-      setCurrentView('app');
+    const token = storage.getAuthToken();
+    if (!token) {
+      return null;
     }
-  }, []);
+    return savedNode;
+  });
+  const navigate = useNavigate();
 
   const handleGetStarted = () => {
-    setCurrentView('login');
-  };
-
-  const handleBackToLanding = () => {
-    setCurrentView('landing');
+    navigate('/login');
   };
 
   const handleLogin = (node: Node) => {
+    storage.setCurrentNode(node);
     setCurrentNode(node);
-    setCurrentPage('upload');
-    setCurrentView('app');
+    navigate('/app/upload');
+  };
+
+  const handleBackToLanding = () => {
+    navigate('/');
   };
 
   const handleLogout = () => {
     storage.setCurrentNode(null);
+    storage.setAuthToken(null);
     setCurrentNode(null);
-    setCurrentPage('upload');
-    setCurrentView('landing');
+    navigate('/login');
   };
-
-  const handleNavigate = (page: PageType) => {
-    setCurrentPage(page);
-  };
-
-  if (currentView === 'landing') {
-    return <LandingPage onGetStarted={handleGetStarted} />;
-  }
-
-  if (currentView === 'login') {
-    return <LoginPage onLogin={handleLogin} onBack={handleBackToLanding} />;
-  }
-
-  if (!currentNode) {
-    return null;
-  }
 
   return (
-    <Layout
-      currentPage={currentPage}
-      onNavigate={handleNavigate}
-      onLogout={handleLogout}
-      currentNode={currentNode}
-    >
-      {currentPage === 'upload' && <UploadPage currentNode={currentNode} />}
-  {currentPage === 'file-validity' && <FileValidityPage />}
-  {currentPage === 'download' && <DownloadPage />}
-      {currentPage === 'visualizer' && <VisualizerPage />}
-      {currentPage === 'global-map' && <GlobalMapPage />}
-    </Layout>
+    <Routes>
+      <Route path="/" element={<LandingPage onGetStarted={handleGetStarted} />} />
+      <Route path="/login" element={<LoginPage onLogin={handleLogin} onBack={handleBackToLanding} />} />
+      <Route
+        path="/app"
+        element={
+          currentNode ? (
+            <Layout currentNode={currentNode} onLogout={handleLogout} />
+          ) : (
+            <Navigate to="/login" replace />
+          )
+        }
+      >
+        <Route index element={<Navigate to="upload" replace />} />
+        <Route path="upload" element={currentNode ? <UploadPage currentNode={currentNode} /> : <Navigate to="/login" replace />} />
+        <Route path="check-integrity" element={<FileValidityPage />} />
+        <Route path="download" element={<DownloadPage />} />
+        <Route path="visualizer" element={<VisualizerPage />} />
+        <Route path="global-map" element={<GlobalMapPage />} />
+      </Route>
+      <Route path="*" element={<Navigate to="/" replace />} />
+    </Routes>
   );
 }
 

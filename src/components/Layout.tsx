@@ -1,26 +1,24 @@
 import { Download, Globe2, Layers, LogOut, Menu, Search, Upload, X } from 'lucide-react';
 import { useState } from 'react';
-import { Node, PageType } from '../types';
+import { NavLink, Outlet } from 'react-router-dom';
+import { Node } from '../types';
 
 const logoSrc = new URL('../public/ledgis-logo.png', import.meta.url).href;
 
 interface LayoutProps {
-  children: React.ReactNode;
-  currentPage: PageType;
-  onNavigate: (page: PageType) => void;
   onLogout: () => void;
   currentNode: Node;
 }
 
-export default function Layout({ children, currentPage, onNavigate, onLogout, currentNode }: LayoutProps) {
+export default function Layout({ onLogout, currentNode }: LayoutProps) {
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   const navItems = [
-  { id: 'upload' as PageType, label: 'Upload', icon: Upload, description: 'Add new evidence to the ledger' },
-  { id: 'file-validity' as PageType, label: 'File Validity', icon: Search, description: 'Verify chunk integrity' },
-  { id: 'download' as PageType, label: 'Download File', icon: Download, description: 'Reconstruct notarised artefacts' },
-    { id: 'visualizer' as PageType, label: 'Visualizer', icon: Layers, description: 'Inspect blockchain flow' },
-    { id: 'global-map' as PageType, label: 'Global Map', icon: Globe2, description: 'Track shard distribution worldwide' },
+    { to: '/app/upload', label: 'Upload', icon: Upload, description: 'Add new evidence to the ledger' },
+    { to: '/app/check-integrity', label: 'Check Integrity', icon: Search, description: 'Verify chunk integrity' },
+    { to: '/app/download', label: 'Download File', icon: Download, description: 'Reconstruct notarised artefacts' },
+    { to: '/app/visualizer', label: 'Visualizer', icon: Layers, description: 'Inspect blockchain flow' },
+    { to: '/app/global-map', label: 'Global Map', icon: Globe2, description: 'Track shard distribution worldwide' },
   ];
 
   return (
@@ -61,38 +59,40 @@ export default function Layout({ children, currentPage, onNavigate, onLogout, cu
           <nav className="flex-1 space-y-1.5 p-4">
             {navItems.map((item) => {
               const Icon = item.icon;
-              const isActive = currentPage === item.id;
-
               return (
-                <button
-                  key={item.id}
-                  onClick={() => {
-                    onNavigate(item.id);
-                    setIsMobileMenuOpen(false);
-                  }}
-                  className="group relative w-full overflow-hidden rounded-xl text-left"
+                <NavLink
+                  key={item.to}
+                  to={item.to}
+                  onClick={() => setIsMobileMenuOpen(false)}
+                  className="group relative block overflow-hidden rounded-xl text-left"
                 >
-                  <div
-                    className={`flex items-center gap-3 px-4 py-3 transition-all duration-200 ${
-                      isActive
-                        ? 'bg-neutral-900/80 text-neutral-50 shadow-[0_18px_40px_-30px_rgba(0,0,0,0.9)] border border-neutral-800'
-                        : 'border border-transparent text-neutral-400 hover:border-neutral-800 hover:bg-neutral-900/60 hover:text-neutral-100'
-                    }`}
-                  >
-                    <span
-                      className={`flex h-10 w-10 items-center justify-center rounded-lg border transition-colors ${
-                        isActive ? 'border-neutral-700 bg-neutral-800/90 text-neutral-100' : 'border-neutral-800 bg-neutral-900/70 text-neutral-400'
-                      }`}
-                    >
-                      <Icon className="h-5 w-5" />
-                    </span>
-                    <div className="flex-1">
-                      <p className="text-sm font-semibold">{item.label}</p>
-                      <p className="text-xs text-neutral-500">{item.description}</p>
-                    </div>
-                  </div>
-                  {isActive && <div className="absolute inset-y-0 left-0 w-[2px] bg-neutral-100" />}
-                </button>
+                  {({ isActive }) => (
+                    <>
+                      <div
+                        className={`flex items-center gap-3 px-4 py-3 transition-all duration-200 ${
+                          isActive
+                            ? 'bg-neutral-900/80 text-neutral-50 shadow-[0_18px_40px_-30px_rgba(0,0,0,0.9)] border border-neutral-800'
+                            : 'border border-transparent text-neutral-400 hover:border-neutral-800 hover:bg-neutral-900/60 hover:text-neutral-100'
+                        }`}
+                      >
+                        <span
+                          className={`flex h-10 w-10 items-center justify-center rounded-lg border transition-colors ${
+                            isActive
+                              ? 'border-neutral-700 bg-neutral-800/90 text-neutral-100'
+                              : 'border-neutral-800 bg-neutral-900/70 text-neutral-400'
+                          }`}
+                        >
+                          <Icon className="h-5 w-5" />
+                        </span>
+                        <div className="flex-1">
+                          <p className="text-sm font-semibold">{item.label}</p>
+                          <p className="text-xs text-neutral-500">{item.description}</p>
+                        </div>
+                      </div>
+                      {isActive && <div className="absolute inset-y-0 left-0 w-[2px] bg-neutral-100" />}
+                    </>
+                  )}
+                </NavLink>
               );
             })}
           </nav>
@@ -135,7 +135,9 @@ export default function Layout({ children, currentPage, onNavigate, onLogout, cu
 
         <main className="relative flex-1 px-6 py-8 lg:px-10">
           <div className="pointer-events-none absolute inset-0 bg-gradient-to-b from-neutral-900/20 via-transparent to-transparent" />
-          <div className="relative">{children}</div>
+          <div className="relative">
+            <Outlet />
+          </div>
         </main>
       </div>
     </div>
